@@ -11,7 +11,7 @@
     "forceConsistentCasingInFileNames": true,
     "moduleResolution": "node",
     "resolveJsonModule": true,
-    "types": ["firefox-webext-browser"],
+    "types": ["firefox-webext-browser", "node"],
     "noImplicitAny": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
