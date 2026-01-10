@@ -1,4 +1,39 @@
 {
-  "name": "notes-ext",
-  "packageManager": "yarn@4.9.1"
+  "name": "notes-collector",
+  "version": "1.0.0",
+  "description": "Firefox extension to capture links and images in order and export to PDF",
+  "private": true,
+  "packageManager": "yarn@4.9.1",
+  "scripts": {
+    "build": "webpack --mode production",
+    "dev": "webpack --mode development --watch",
+    "start": "web-ext run --source-dir dist",
+    "lint": "yarn lint:ts && yarn lint:eslint && yarn lint:style",
+    "lint:ts": "tsc --noEmit",
+    "lint:eslint": "eslint 'src/**/*.ts'",
+    "lint:style": "stylelint 'src/**/*.scss'",
+    "format": "prettier --write 'src/**/*.{ts,scss,html}'",
+    "format:check": "prettier --check 'src/**/*.{ts,scss,html}'"
+  },
+  "devDependencies": {
+    "@types/firefox-webext-browser": "^143.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.52.0",
+    "@typescript-eslint/parser": "^8.52.0",
+    "copy-webpack-plugin": "^13.0.1",
+    "css-loader": "^7.1.2",
+    "eslint": "^9.39.2",
+    "eslint-config-prettier": "^10.1.8",
+    "postcss": "^8.5.6",
+    "prettier": "^3.7.4",
+    "sass": "^1.97.2",
+    "sass-loader": "^16.0.6",
+    "style-loader": "^4.0.0",
+    "stylelint": "^16.26.1",
+    "stylelint-config-standard-scss": "^16.0.0",
+    "ts-loader": "^9.5.4",
+    "typescript": "^5.9.3",
+    "web-ext": "^9.2.0",
+    "webpack": "^5.104.1",
+    "webpack-cli": "^6.0.1"
+  }
 }
