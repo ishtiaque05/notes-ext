@@ -10,13 +10,14 @@
     "start": "web-ext run --source-dir dist",
     "lint": "yarn lint:ts && yarn lint:eslint && yarn lint:style",
     "lint:ts": "tsc --noEmit",
-    "lint:eslint": "eslint 'src/**/*.ts'",
+    "lint:eslint": "ESLINT_USE_FLAT_CONFIG=false eslint 'src/**/*.ts'",
     "lint:style": "stylelint 'src/**/*.scss'",
     "format": "prettier --write 'src/**/*.{ts,scss,html}'",
     "format:check": "prettier --check 'src/**/*.{ts,scss,html}'"
   },
   "devDependencies": {
     "@types/firefox-webext-browser": "^143.0.0",
+    "@types/node": "^25.0.6",
     "@typescript-eslint/eslint-plugin": "^8.52.0",
     "@typescript-eslint/parser": "^8.52.0",
     "copy-webpack-plugin": "^13.0.1",

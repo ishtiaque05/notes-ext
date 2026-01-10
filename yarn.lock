@@ -649,7 +649,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@types/node@npm:*":
+"@types/node@npm:*, @types/node@npm:^25.0.6":
   version: 25.0.6
   resolution: "@types/node@npm:25.0.6"
   dependencies:
@@ -3692,6 +3692,7 @@ __metadata:
   resolution: "notes-collector@workspace:."
   dependencies:
     "@types/firefox-webext-browser": "npm:^143.0.0"
+    "@types/node": "npm:^25.0.6"
     "@typescript-eslint/eslint-plugin": "npm:^8.52.0"
     "@typescript-eslint/parser": "npm:^8.52.0"
     copy-webpack-plugin: "npm:^13.0.1"
