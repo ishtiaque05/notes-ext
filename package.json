@@ -1,4 +1,26 @@
 {
-  "name": "notes-ext",
-  "packageManager": "yarn@4.9.1"
+  "name": "notes-collector",
+  "version": "1.0.0",
+  "description": "Firefox extension to capture links and images in order and export to PDF",
+  "private": true,
+  "packageManager": "yarn@4.9.1",
+  "scripts": {
+    "build": "webpack --mode production",
+    "dev": "webpack --mode development --watch",
+    "start": "web-ext run --source-dir dist",
+    "lint:ts": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/firefox-webext-browser": "^143.0.0",
+    "copy-webpack-plugin": "^13.0.1",
+    "css-loader": "^7.1.2",
+    "sass": "^1.97.2",
+    "sass-loader": "^16.0.6",
+    "style-loader": "^4.0.0",
+    "ts-loader": "^9.5.4",
+    "typescript": "^5.9.3",
+    "web-ext": "^9.2.0",
+    "webpack": "^5.104.1",
+    "webpack-cli": "^6.0.1"
+  }
 }
