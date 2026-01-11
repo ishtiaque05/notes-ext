@@ -8,6 +8,7 @@ function addHoverListeners() {
   // Use event delegation on document for better performance
   document.addEventListener('mouseover', handleMouseOver);
   document.addEventListener('mouseout', handleMouseOut);
+  document.addEventListener('click', handleClick);
 }
 
 function handleMouseOver(event: MouseEvent) {
@@ -40,6 +41,49 @@ function isCapturableElement(element: HTMLElement): boolean {
   }
 
   return false;
+}
+
+function handleClick(event: MouseEvent) {
+  const target = event.target as HTMLElement;
+
+  // Handle link clicks
+  if (target.tagName === 'A') {
+    const link = target as HTMLAnchorElement;
+    if (link.href) {
+      event.preventDefault(); // Prevent default navigation
+      captureLink(link);
+    }
+  }
+
+  // Handle image clicks (will be implemented in Commit 7)
+  // TODO: Add image capture in next commit
+}
+
+async function captureLink(link: HTMLAnchorElement) {
+  const href = link.href;
+  const text = link.textContent?.trim() || link.getAttribute('aria-label') || href;
+
+  try {
+    // Send message to background script to store the link
+    await browser.runtime.sendMessage({
+      type: 'CAPTURE_LINK',
+      data: { href, text }
+    });
+
+    // Visual feedback - briefly show the link was captured
+    showCaptureConfirmation(link);
+  } catch (error) {
+    console.error('Failed to capture link:', error);
+  }
+}
+
+function showCaptureConfirmation(element: HTMLElement) {
+  // Add a temporary class for visual feedback
+  element.classList.add('notes-collector-captured');
+
+  setTimeout(() => {
+    element.classList.remove('notes-collector-captured');
+  }, 500);
 }
 
 // Initialize when DOM is ready
