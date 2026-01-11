@@ -51,7 +51,7 @@ function handleClick(event: MouseEvent) {
     const link = target as HTMLAnchorElement;
     if (link.href) {
       event.preventDefault(); // Prevent default navigation
-      captureLink(link);
+      void captureLink(link);
     }
   }
 
@@ -60,7 +60,7 @@ function handleClick(event: MouseEvent) {
     const img = target as HTMLImageElement;
     if (img.src) {
       event.preventDefault(); // Prevent default behavior
-      captureImage(img);
+      void captureImage(img);
     }
   }
 }
@@ -166,14 +166,14 @@ function convertToDataURL(
     try {
       const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
       resolve(dataUrl);
-    } catch (error) {
+    } catch {
       // If JPEG conversion fails (e.g., for transparent images), try PNG
       const dataUrl = canvas.toDataURL('image/png');
       resolve(dataUrl);
     }
-  } catch (error) {
+  } catch (err) {
     // CORS error or other canvas error
-    reject(new Error(`Canvas conversion failed: ${error}`));
+    reject(new Error(`Canvas conversion failed: ${String(err)}`));
   }
 }
 

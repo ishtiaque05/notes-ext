@@ -8,20 +8,22 @@ if (process.env.NODE_ENV === 'development') {
 }
 
 // Initialize storage on extension install
-browser.runtime.onInstalled.addListener(async () => {
-  if (process.env.NODE_ENV === 'development') {
-    console.warn('Notes Collector: Extension installed');
-  }
+browser.runtime.onInstalled.addListener(() => {
+  void (async () => {
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('Notes Collector: Extension installed');
+    }
 
-  // Initialize storage with empty data structure
-  const result = await browser.storage.local.get(STORAGE_KEY);
-  if (!result[STORAGE_KEY]) {
-    const initialData: StorageData = {
-      items: [],
-      nextOrder: 0
-    };
-    await browser.storage.local.set({ [STORAGE_KEY]: initialData });
-  }
+    // Initialize storage with empty data structure
+    const result = await browser.storage.local.get(STORAGE_KEY);
+    if (!result[STORAGE_KEY]) {
+      const initialData: StorageData = {
+        items: [],
+        nextOrder: 0
+      };
+      await browser.storage.local.set({ [STORAGE_KEY]: initialData });
+    }
+  })();
 });
 
 // Handle messages from content script and sidebar
@@ -177,13 +179,13 @@ async function handleClearAll(): Promise<MessageResponse> {
 // Helper function to get storage data
 async function getStorageData(): Promise<StorageData> {
   const result = await browser.storage.local.get(STORAGE_KEY);
-  return result[STORAGE_KEY] || { items: [], nextOrder: 0 };
+  return (result[STORAGE_KEY] as StorageData) || { items: [], nextOrder: 0 };
 }
 
 // Helper function to notify sidebar of changes
-function notifySidebar(message: any) {
+function notifySidebar(message: { type: string; data?: unknown }) {
   // Send message to all sidebar instances
-  browser.runtime.sendMessage(message).catch(() => {
+  void browser.runtime.sendMessage(message).catch(() => {
     // Sidebar might not be open, ignore errors
   });
 }

@@ -15,32 +15,34 @@ if (process.env.NODE_ENV === 'development') {
 }
 
 // Initialize sidebar
-document.addEventListener('DOMContentLoaded', async () => {
-  if (process.env.NODE_ENV === 'development') {
-    console.warn('Sidebar DOM loaded');
-  }
+document.addEventListener('DOMContentLoaded', () => {
+  void (async () => {
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('Sidebar DOM loaded');
+    }
 
-  // Get DOM elements
-  itemsContainer = document.getElementById('items-container')!;
-  savePdfBtn = document.getElementById('save-pdf-btn') as HTMLButtonElement;
-  clearAllBtn = document.getElementById('clear-all-btn') as HTMLButtonElement;
-  subtitle = document.querySelector('.subtitle')!;
+    // Get DOM elements
+    itemsContainer = document.getElementById('items-container')!;
+    savePdfBtn = document.getElementById('save-pdf-btn') as HTMLButtonElement;
+    clearAllBtn = document.getElementById('clear-all-btn') as HTMLButtonElement;
+    subtitle = document.querySelector('.subtitle')!;
 
-  // Load items from storage
-  await loadItems();
+    // Load items from storage
+    await loadItems();
 
-  // Set up event listeners
-  savePdfBtn.addEventListener('click', handleSavePdf);
-  clearAllBtn.addEventListener('click', handleClearAll);
+    // Set up event listeners
+    savePdfBtn.addEventListener('click', () => { void handleSavePdf(); });
+    clearAllBtn.addEventListener('click', () => { void handleClearAll(); });
 
-  // Listen for new items from background script
-  browser.runtime.onMessage.addListener(handleBackgroundMessage);
+    // Listen for new items from background script
+    browser.runtime.onMessage.addListener(handleBackgroundMessage);
+  })();
 });
 
 // Load items from storage
 async function loadItems() {
   try {
-    const response = await browser.runtime.sendMessage({ type: 'GET_ITEMS' });
+    const response = await browser.runtime.sendMessage({ type: 'GET_ITEMS' }) as { success: boolean; data?: CapturedItem[] };
 
     if (response.success && response.data) {
       capturedItems = response.data;
@@ -115,7 +117,7 @@ function renderItem(item: CapturedItem): HTMLLIElement {
   // Add delete button event listener
   const deleteBtn = li.querySelector('.delete-btn') as HTMLButtonElement;
   if (deleteBtn) {
-    deleteBtn.addEventListener('click', () => handleDeleteItem(item.id));
+    deleteBtn.addEventListener('click', () => { void handleDeleteItem(item.id); });
   }
 
   return li;
@@ -149,13 +151,14 @@ function updateUI() {
 }
 
 // Handle messages from background script
-function handleBackgroundMessage(message: any) {
-  if (message.type === 'ITEM_ADDED' && message.data) {
-    capturedItems.push(message.data);
+function handleBackgroundMessage(message: { type: string; data?: unknown }) {
+  if (message.type === 'ITEM_ADDED' && message.data && typeof message.data === 'object' && 'id' in message.data && 'type' in message.data) {
+    capturedItems.push(message.data as CapturedItem);
     renderItems();
     updateUI();
-  } else if (message.type === 'ITEM_DELETED' && message.data) {
-    capturedItems = capturedItems.filter(item => item.id !== message.data.id);
+  } else if (message.type === 'ITEM_DELETED' && message.data && typeof message.data === 'object' && 'id' in message.data) {
+    const data = message.data as { id: string };
+    capturedItems = capturedItems.filter(item => item.id !== data.id);
     renderItems();
     updateUI();
   } else if (message.type === 'ITEMS_CLEARED') {
@@ -175,7 +178,7 @@ async function handleDeleteItem(id: string) {
     const response = await browser.runtime.sendMessage({
       type: 'DELETE_ITEM',
       data: { id }
-    });
+    }) as { success: boolean };
 
     if (response.success) {
       capturedItems = capturedItems.filter(item => item.id !== id);
@@ -194,7 +197,7 @@ async function handleClearAll() {
   }
 
   try {
-    const response = await browser.runtime.sendMessage({ type: 'CLEAR_ALL' });
+    const response = await browser.runtime.sendMessage({ type: 'CLEAR_ALL' }) as { success: boolean };
 
     if (response.success) {
       capturedItems = [];
