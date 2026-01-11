@@ -55,8 +55,14 @@ function handleClick(event: MouseEvent) {
     }
   }
 
-  // Handle image clicks (will be implemented in Commit 7)
-  // TODO: Add image capture in next commit
+  // Handle image clicks
+  if (target.tagName === 'IMG') {
+    const img = target as HTMLImageElement;
+    if (img.src) {
+      event.preventDefault(); // Prevent default behavior
+      captureImage(img);
+    }
+  }
 }
 
 async function captureLink(link: HTMLAnchorElement) {
@@ -74,6 +80,100 @@ async function captureLink(link: HTMLAnchorElement) {
     showCaptureConfirmation(link);
   } catch (error) {
     console.error('Failed to capture link:', error);
+  }
+}
+
+async function captureImage(img: HTMLImageElement) {
+  const src = img.src;
+  const alt = img.alt || img.getAttribute('title') || 'Image';
+
+  try {
+    // Convert image to data URL
+    const dataUrl = await imageToDataURL(img);
+
+    // Send message to background script to store the image
+    await browser.runtime.sendMessage({
+      type: 'CAPTURE_IMAGE',
+      data: { src, alt, dataUrl }
+    });
+
+    // Visual feedback - briefly show the image was captured
+    showCaptureConfirmation(img);
+  } catch (error) {
+    console.error('Failed to capture image:', error);
+
+    // Try fallback: send without data URL (will store original URL only)
+    try {
+      await browser.runtime.sendMessage({
+        type: 'CAPTURE_IMAGE',
+        data: { src, alt, dataUrl: '' }
+      });
+      showCaptureConfirmation(img);
+    } catch (fallbackError) {
+      console.error('Fallback capture also failed:', fallbackError);
+    }
+  }
+}
+
+async function imageToDataURL(img: HTMLImageElement): Promise<string> {
+  return new Promise((resolve, reject) => {
+    // If image is already loaded, convert it
+    if (img.complete && img.naturalWidth > 0) {
+      convertToDataURL(img, resolve, reject);
+    } else {
+      // Wait for image to load
+      const loadHandler = () => {
+        convertToDataURL(img, resolve, reject);
+        img.removeEventListener('load', loadHandler);
+        img.removeEventListener('error', errorHandler);
+      };
+
+      const errorHandler = () => {
+        img.removeEventListener('load', loadHandler);
+        img.removeEventListener('error', errorHandler);
+        reject(new Error('Image failed to load'));
+      };
+
+      img.addEventListener('load', loadHandler);
+      img.addEventListener('error', errorHandler);
+    }
+  });
+}
+
+function convertToDataURL(
+  img: HTMLImageElement,
+  resolve: (value: string) => void,
+  reject: (reason: Error) => void
+) {
+  try {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+
+    if (!ctx) {
+      reject(new Error('Could not get canvas context'));
+      return;
+    }
+
+    // Set canvas dimensions to match image
+    canvas.width = img.naturalWidth || img.width;
+    canvas.height = img.naturalHeight || img.height;
+
+    // Draw image to canvas
+    ctx.drawImage(img, 0, 0);
+
+    // Convert to data URL
+    // Using JPEG with quality 0.8 to reduce size while maintaining quality
+    try {
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+      resolve(dataUrl);
+    } catch (error) {
+      // If JPEG conversion fails (e.g., for transparent images), try PNG
+      const dataUrl = canvas.toDataURL('image/png');
+      resolve(dataUrl);
+    }
+  } catch (error) {
+    // CORS error or other canvas error
+    reject(new Error(`Canvas conversion failed: ${error}`));
   }
 }
 

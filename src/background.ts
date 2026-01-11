@@ -1,5 +1,5 @@
 // Background service worker for Notes Collector extension
-import type { Message, MessageResponse, StorageData, CapturedItem, LinkMetadata } from './types';
+import type { Message, MessageResponse, StorageData, CapturedItem, LinkMetadata, ImageMetadata } from './types';
 
 const STORAGE_KEY = 'notesCollectorData';
 
@@ -33,6 +33,8 @@ browser.runtime.onMessage.addListener((message: Message): Promise<MessageRespons
   switch (message.type) {
     case 'CAPTURE_LINK':
       return handleCaptureLink(message.data);
+    case 'CAPTURE_IMAGE':
+      return handleCaptureImage(message.data);
     case 'GET_ITEMS':
       return handleGetItems();
     case 'DELETE_ITEM':
@@ -74,6 +76,41 @@ async function handleCaptureLink(data: { href: string; text: string }): Promise<
     return { success: true, data: newItem };
   } catch (error) {
     console.error('Error capturing link:', error);
+    return { success: false, error: String(error) };
+  }
+}
+
+// Handler for capturing images
+async function handleCaptureImage(data: { src: string; alt: string; dataUrl: string }): Promise<MessageResponse<CapturedItem>> {
+  try {
+    const storageData = await getStorageData();
+
+    // Use data URL if available, otherwise use original src
+    const content = data.dataUrl || data.src;
+
+    const newItem: CapturedItem = {
+      id: crypto.randomUUID(),
+      type: 'image',
+      order: storageData.nextOrder,
+      timestamp: Date.now(),
+      content: content,
+      metadata: {
+        alt: data.alt,
+        originalSrc: data.src
+      } as ImageMetadata
+    };
+
+    storageData.items.push(newItem);
+    storageData.nextOrder++;
+
+    await browser.storage.local.set({ [STORAGE_KEY]: storageData });
+
+    // Notify sidebar of new item
+    notifySidebar({ type: 'ITEM_ADDED', data: newItem });
+
+    return { success: true, data: newItem };
+  } catch (error) {
+    console.error('Error capturing image:', error);
     return { success: false, error: String(error) };
   }
 }
