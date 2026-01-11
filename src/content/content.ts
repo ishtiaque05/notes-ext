@@ -51,7 +51,7 @@ function handleClick(event: MouseEvent) {
     const link = target as HTMLAnchorElement;
     if (link.href) {
       event.preventDefault(); // Prevent default navigation
-      captureLink(link);
+      void captureLink(link);
     }
   }
 
@@ -60,7 +60,7 @@ function handleClick(event: MouseEvent) {
     const img = target as HTMLImageElement;
     if (img.src) {
       event.preventDefault(); // Prevent default behavior
-      captureImage(img);
+      void captureImage(img);
     }
   }
 }
@@ -73,7 +73,7 @@ async function captureLink(link: HTMLAnchorElement) {
     // Send message to background script to store the link
     await browser.runtime.sendMessage({
       type: 'CAPTURE_LINK',
-      data: { href, text }
+      data: { href, text },
     });
 
     // Visual feedback - briefly show the link was captured
@@ -94,7 +94,7 @@ async function captureImage(img: HTMLImageElement) {
     // Send message to background script to store the image
     await browser.runtime.sendMessage({
       type: 'CAPTURE_IMAGE',
-      data: { src, alt, dataUrl }
+      data: { src, alt, dataUrl },
     });
 
     // Visual feedback - briefly show the image was captured
@@ -106,7 +106,7 @@ async function captureImage(img: HTMLImageElement) {
     try {
       await browser.runtime.sendMessage({
         type: 'CAPTURE_IMAGE',
-        data: { src, alt, dataUrl: '' }
+        data: { src, alt, dataUrl: '' },
       });
       showCaptureConfirmation(img);
     } catch (fallbackError) {
@@ -166,14 +166,14 @@ function convertToDataURL(
     try {
       const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
       resolve(dataUrl);
-    } catch (error) {
+    } catch {
       // If JPEG conversion fails (e.g., for transparent images), try PNG
       const dataUrl = canvas.toDataURL('image/png');
       resolve(dataUrl);
     }
-  } catch (error) {
+  } catch (err) {
     // CORS error or other canvas error
-    reject(new Error(`Canvas conversion failed: ${error}`));
+    reject(new Error(`Canvas conversion failed: ${String(err)}`));
   }
 }
 

@@ -5,7 +5,9 @@
   outline-offset: 2px !important;
   box-shadow: 0 0 8px rgb(255, 215, 0, 0.5) !important;
   cursor: pointer !important;
-  transition: outline 0.2s ease, box-shadow 0.2s ease !important;
+  transition:
+    outline 0.2s ease,
+    box-shadow 0.2s ease !important;
   position: relative !important;
 
   // Add a subtle background overlay for better visibility
@@ -20,7 +22,7 @@
 
 // Visual feedback when an item is captured
 .notes-collector-captured {
-  outline: 3px solid #00ff00 !important;
+  outline: 3px solid #0f0 !important;
   outline-offset: 2px !important;
   box-shadow: 0 0 12px rgb(0, 255, 0, 0.6) !important;
   animation: capture-flash 0.5s ease !important;
@@ -35,12 +37,14 @@
     outline-color: #ffd700;
     box-shadow: 0 0 8px rgb(255, 215, 0, 0.5);
   }
+
   50% {
-    outline-color: #00ff00;
+    outline-color: #0f0;
     box-shadow: 0 0 16px rgb(0, 255, 0, 0.8);
   }
+
   100% {
-    outline-color: #00ff00;
+    outline-color: #0f0;
     box-shadow: 0 0 12px rgb(0, 255, 0, 0.6);
   }
 }

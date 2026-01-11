@@ -1,5 +1,12 @@
 // Background service worker for Notes Collector extension
-import type { Message, MessageResponse, StorageData, CapturedItem, LinkMetadata, ImageMetadata } from './types';
+import type {
+  Message,
+  MessageResponse,
+  StorageData,
+  CapturedItem,
+  LinkMetadata,
+  ImageMetadata,
+} from './types';
 
 const STORAGE_KEY = 'notesCollectorData';
 
@@ -8,20 +15,22 @@ if (process.env.NODE_ENV === 'development') {
 }
 
 // Initialize storage on extension install
-browser.runtime.onInstalled.addListener(async () => {
-  if (process.env.NODE_ENV === 'development') {
-    console.warn('Notes Collector: Extension installed');
-  }
+browser.runtime.onInstalled.addListener(() => {
+  void (async () => {
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('Notes Collector: Extension installed');
+    }
 
-  // Initialize storage with empty data structure
-  const result = await browser.storage.local.get(STORAGE_KEY);
-  if (!result[STORAGE_KEY]) {
-    const initialData: StorageData = {
-      items: [],
-      nextOrder: 0
-    };
-    await browser.storage.local.set({ [STORAGE_KEY]: initialData });
-  }
+    // Initialize storage with empty data structure
+    const result = await browser.storage.local.get(STORAGE_KEY);
+    if (!result[STORAGE_KEY]) {
+      const initialData: StorageData = {
+        items: [],
+        nextOrder: 0,
+      };
+      await browser.storage.local.set({ [STORAGE_KEY]: initialData });
+    }
+  })();
 });
 
 // Handle messages from content script and sidebar
@@ -49,7 +58,10 @@ browser.runtime.onMessage.addListener((message: Message): Promise<MessageRespons
 });
 
 // Handler for capturing links
-async function handleCaptureLink(data: { href: string; text: string }): Promise<MessageResponse<CapturedItem>> {
+async function handleCaptureLink(data: {
+  href: string;
+  text: string;
+}): Promise<MessageResponse<CapturedItem>> {
   try {
     const storageData = await getStorageData();
 
@@ -61,8 +73,8 @@ async function handleCaptureLink(data: { href: string; text: string }): Promise<
       content: data.href,
       metadata: {
         text: data.text,
-        href: data.href
-      } as LinkMetadata
+        href: data.href,
+      } as LinkMetadata,
     };
 
     storageData.items.push(newItem);
@@ -81,7 +93,11 @@ async function handleCaptureLink(data: { href: string; text: string }): Promise<
 }
 
 // Handler for capturing images
-async function handleCaptureImage(data: { src: string; alt: string; dataUrl: string }): Promise<MessageResponse<CapturedItem>> {
+async function handleCaptureImage(data: {
+  src: string;
+  alt: string;
+  dataUrl: string;
+}): Promise<MessageResponse<CapturedItem>> {
   try {
     const storageData = await getStorageData();
 
@@ -96,8 +112,8 @@ async function handleCaptureImage(data: { src: string; alt: string; dataUrl: str
       content: content,
       metadata: {
         alt: data.alt,
-        originalSrc: data.src
-      } as ImageMetadata
+        originalSrc: data.src,
+      } as ImageMetadata,
     };
 
     storageData.items.push(newItem);
@@ -130,7 +146,7 @@ async function handleGetItems(): Promise<MessageResponse<CapturedItem[]>> {
 async function handleDeleteItem(id: string): Promise<MessageResponse> {
   try {
     const storageData = await getStorageData();
-    storageData.items = storageData.items.filter(item => item.id !== id);
+    storageData.items = storageData.items.filter((item) => item.id !== id);
     await browser.storage.local.set({ [STORAGE_KEY]: storageData });
 
     notifySidebar({ type: 'ITEM_DELETED', data: { id } });
@@ -161,7 +177,7 @@ async function handleClearAll(): Promise<MessageResponse> {
   try {
     const storageData: StorageData = {
       items: [],
-      nextOrder: 0
+      nextOrder: 0,
     };
     await browser.storage.local.set({ [STORAGE_KEY]: storageData });
 
@@ -177,13 +193,13 @@ async function handleClearAll(): Promise<MessageResponse> {
 // Helper function to get storage data
 async function getStorageData(): Promise<StorageData> {
   const result = await browser.storage.local.get(STORAGE_KEY);
-  return result[STORAGE_KEY] || { items: [], nextOrder: 0 };
+  return (result[STORAGE_KEY] as StorageData) || { items: [], nextOrder: 0 };
 }
 
 // Helper function to notify sidebar of changes
-function notifySidebar(message: any) {
+function notifySidebar(message: { type: string; data?: unknown }) {
   // Send message to all sidebar instances
-  browser.runtime.sendMessage(message).catch(() => {
+  void browser.runtime.sendMessage(message).catch(() => {
     // Sidebar might not be open, ignore errors
   });
 }
