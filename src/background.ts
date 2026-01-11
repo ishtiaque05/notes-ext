@@ -1,5 +1,12 @@
 // Background service worker for Notes Collector extension
-import type { Message, MessageResponse, StorageData, CapturedItem, LinkMetadata, ImageMetadata } from './types';
+import type {
+  Message,
+  MessageResponse,
+  StorageData,
+  CapturedItem,
+  LinkMetadata,
+  ImageMetadata,
+} from './types';
 
 const STORAGE_KEY = 'notesCollectorData';
 
@@ -19,7 +26,7 @@ browser.runtime.onInstalled.addListener(() => {
     if (!result[STORAGE_KEY]) {
       const initialData: StorageData = {
         items: [],
-        nextOrder: 0
+        nextOrder: 0,
       };
       await browser.storage.local.set({ [STORAGE_KEY]: initialData });
     }
@@ -51,7 +58,10 @@ browser.runtime.onMessage.addListener((message: Message): Promise<MessageRespons
 });
 
 // Handler for capturing links
-async function handleCaptureLink(data: { href: string; text: string }): Promise<MessageResponse<CapturedItem>> {
+async function handleCaptureLink(data: {
+  href: string;
+  text: string;
+}): Promise<MessageResponse<CapturedItem>> {
   try {
     const storageData = await getStorageData();
 
@@ -63,8 +73,8 @@ async function handleCaptureLink(data: { href: string; text: string }): Promise<
       content: data.href,
       metadata: {
         text: data.text,
-        href: data.href
-      } as LinkMetadata
+        href: data.href,
+      } as LinkMetadata,
     };
 
     storageData.items.push(newItem);
@@ -83,7 +93,11 @@ async function handleCaptureLink(data: { href: string; text: string }): Promise<
 }
 
 // Handler for capturing images
-async function handleCaptureImage(data: { src: string; alt: string; dataUrl: string }): Promise<MessageResponse<CapturedItem>> {
+async function handleCaptureImage(data: {
+  src: string;
+  alt: string;
+  dataUrl: string;
+}): Promise<MessageResponse<CapturedItem>> {
   try {
     const storageData = await getStorageData();
 
@@ -98,8 +112,8 @@ async function handleCaptureImage(data: { src: string; alt: string; dataUrl: str
       content: content,
       metadata: {
         alt: data.alt,
-        originalSrc: data.src
-      } as ImageMetadata
+        originalSrc: data.src,
+      } as ImageMetadata,
     };
 
     storageData.items.push(newItem);
@@ -132,7 +146,7 @@ async function handleGetItems(): Promise<MessageResponse<CapturedItem[]>> {
 async function handleDeleteItem(id: string): Promise<MessageResponse> {
   try {
     const storageData = await getStorageData();
-    storageData.items = storageData.items.filter(item => item.id !== id);
+    storageData.items = storageData.items.filter((item) => item.id !== id);
     await browser.storage.local.set({ [STORAGE_KEY]: storageData });
 
     notifySidebar({ type: 'ITEM_DELETED', data: { id } });
@@ -163,7 +177,7 @@ async function handleClearAll(): Promise<MessageResponse> {
   try {
     const storageData: StorageData = {
       items: [],
-      nextOrder: 0
+      nextOrder: 0,
     };
     await browser.storage.local.set({ [STORAGE_KEY]: storageData });
 

@@ -73,7 +73,7 @@ async function captureLink(link: HTMLAnchorElement) {
     // Send message to background script to store the link
     await browser.runtime.sendMessage({
       type: 'CAPTURE_LINK',
-      data: { href, text }
+      data: { href, text },
     });
 
     // Visual feedback - briefly show the link was captured
@@ -94,7 +94,7 @@ async function captureImage(img: HTMLImageElement) {
     // Send message to background script to store the image
     await browser.runtime.sendMessage({
       type: 'CAPTURE_IMAGE',
-      data: { src, alt, dataUrl }
+      data: { src, alt, dataUrl },
     });
 
     // Visual feedback - briefly show the image was captured
@@ -106,7 +106,7 @@ async function captureImage(img: HTMLImageElement) {
     try {
       await browser.runtime.sendMessage({
         type: 'CAPTURE_IMAGE',
-        data: { src, alt, dataUrl: '' }
+        data: { src, alt, dataUrl: '' },
       });
       showCaptureConfirmation(img);
     } catch (fallbackError) {

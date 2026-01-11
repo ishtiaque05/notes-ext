@@ -31,8 +31,12 @@ document.addEventListener('DOMContentLoaded', () => {
     await loadItems();
 
     // Set up event listeners
-    savePdfBtn.addEventListener('click', () => { void handleSavePdf(); });
-    clearAllBtn.addEventListener('click', () => { void handleClearAll(); });
+    savePdfBtn.addEventListener('click', () => {
+      void handleSavePdf();
+    });
+    clearAllBtn.addEventListener('click', () => {
+      void handleClearAll();
+    });
 
     // Listen for new items from background script
     browser.runtime.onMessage.addListener(handleBackgroundMessage);
@@ -42,7 +46,10 @@ document.addEventListener('DOMContentLoaded', () => {
 // Load items from storage
 async function loadItems() {
   try {
-    const response = await browser.runtime.sendMessage({ type: 'GET_ITEMS' }) as { success: boolean; data?: CapturedItem[] };
+    const response = (await browser.runtime.sendMessage({ type: 'GET_ITEMS' })) as {
+      success: boolean;
+      data?: CapturedItem[];
+    };
 
     if (response.success && response.data) {
       capturedItems = response.data;
@@ -60,7 +67,8 @@ function renderItems() {
   itemsContainer.innerHTML = '';
 
   if (capturedItems.length === 0) {
-    itemsContainer.innerHTML = '<p class="empty-state">No items captured yet. Click on links or images to capture them.</p>';
+    itemsContainer.innerHTML =
+      '<p class="empty-state">No items captured yet. Click on links or images to capture them.</p>';
     return;
   }
 
@@ -72,7 +80,7 @@ function renderItems() {
   listElement.className = 'items-list';
 
   // Render each item
-  sortedItems.forEach(item => {
+  sortedItems.forEach((item) => {
     const itemElement = renderItem(item);
     listElement.appendChild(itemElement);
   });
@@ -117,7 +125,9 @@ function renderItem(item: CapturedItem): HTMLLIElement {
   // Add delete button event listener
   const deleteBtn = li.querySelector('.delete-btn') as HTMLButtonElement;
   if (deleteBtn) {
-    deleteBtn.addEventListener('click', () => { void handleDeleteItem(item.id); });
+    deleteBtn.addEventListener('click', () => {
+      void handleDeleteItem(item.id);
+    });
   }
 
   return li;
@@ -140,8 +150,8 @@ function updateUI() {
 
   // Update subtitle with item count
   const count = capturedItems.length;
-  const linkCount = capturedItems.filter(item => item.type === 'link').length;
-  const imageCount = capturedItems.filter(item => item.type === 'image').length;
+  const linkCount = capturedItems.filter((item) => item.type === 'link').length;
+  const imageCount = capturedItems.filter((item) => item.type === 'image').length;
 
   if (count === 0) {
     subtitle.textContent = 'Captured items will appear here';
@@ -152,13 +162,24 @@ function updateUI() {
 
 // Handle messages from background script
 function handleBackgroundMessage(message: { type: string; data?: unknown }) {
-  if (message.type === 'ITEM_ADDED' && message.data && typeof message.data === 'object' && 'id' in message.data && 'type' in message.data) {
+  if (
+    message.type === 'ITEM_ADDED' &&
+    message.data &&
+    typeof message.data === 'object' &&
+    'id' in message.data &&
+    'type' in message.data
+  ) {
     capturedItems.push(message.data as CapturedItem);
     renderItems();
     updateUI();
-  } else if (message.type === 'ITEM_DELETED' && message.data && typeof message.data === 'object' && 'id' in message.data) {
+  } else if (
+    message.type === 'ITEM_DELETED' &&
+    message.data &&
+    typeof message.data === 'object' &&
+    'id' in message.data
+  ) {
     const data = message.data as { id: string };
-    capturedItems = capturedItems.filter(item => item.id !== data.id);
+    capturedItems = capturedItems.filter((item) => item.id !== data.id);
     renderItems();
     updateUI();
   } else if (message.type === 'ITEMS_CLEARED') {
@@ -175,13 +196,13 @@ async function handleDeleteItem(id: string) {
   }
 
   try {
-    const response = await browser.runtime.sendMessage({
+    const response = (await browser.runtime.sendMessage({
       type: 'DELETE_ITEM',
-      data: { id }
-    }) as { success: boolean };
+      data: { id },
+    })) as { success: boolean };
 
     if (response.success) {
-      capturedItems = capturedItems.filter(item => item.id !== id);
+      capturedItems = capturedItems.filter((item) => item.id !== id);
       renderItems();
       updateUI();
     }
@@ -197,7 +218,9 @@ async function handleClearAll() {
   }
 
   try {
-    const response = await browser.runtime.sendMessage({ type: 'CLEAR_ALL' }) as { success: boolean };
+    const response = (await browser.runtime.sendMessage({ type: 'CLEAR_ALL' })) as {
+      success: boolean;
+    };
 
     if (response.success) {
       capturedItems = [];
