@@ -17,3 +17,30 @@
     pointer-events: none;
   }
 }
+
+// Visual feedback when an item is captured
+.notes-collector-captured {
+  outline: 3px solid #00ff00 !important;
+  outline-offset: 2px !important;
+  box-shadow: 0 0 12px rgb(0, 255, 0, 0.6) !important;
+  animation: capture-flash 0.5s ease !important;
+
+  &::after {
+    background-color: rgb(0, 255, 0, 0.15) !important;
+  }
+}
+
+@keyframes capture-flash {
+  0% {
+    outline-color: #ffd700;
+    box-shadow: 0 0 8px rgb(255, 215, 0, 0.5);
+  }
+  50% {
+    outline-color: #00ff00;
+    box-shadow: 0 0 16px rgb(0, 255, 0, 0.8);
+  }
+  100% {
+    outline-color: #00ff00;
+    box-shadow: 0 0 12px rgb(0, 255, 0, 0.6);
+  }
+}
