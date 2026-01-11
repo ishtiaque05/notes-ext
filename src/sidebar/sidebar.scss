@@ -74,13 +74,27 @@ main {
   background-color: #f9f9f9;
   border: 1px solid $border-color;
   border-radius: 6px;
+  cursor: move;
   transition:
     background-color 0.2s,
-    box-shadow 0.2s;
+    box-shadow 0.2s,
+    opacity 0.2s,
+    transform 0.2s;
 
   &:hover {
     background-color: #f0f0f0;
     box-shadow: 0 2px 4px rgb(0, 0, 0, 0.05);
+  }
+
+  &.dragging {
+    opacity: 0.4;
+    cursor: grabbing;
+  }
+
+  &.drag-over {
+    border: 2px dashed $primary-color;
+    background-color: rgb(74, 144, 226, 0.1);
+    transform: scale(1.02);
   }
 
   .item-content {
@@ -89,6 +103,24 @@ main {
     gap: 12px;
     flex: 1;
     min-width: 0; // Allow text to truncate
+  }
+
+  .item-drag-handle {
+    font-size: 16px;
+    color: #999;
+    cursor: grab;
+    user-select: none;
+    flex-shrink: 0;
+    line-height: 1;
+    padding: 0 4px;
+
+    &:hover {
+      color: $primary-color;
+    }
+
+    &:active {
+      cursor: grabbing;
+    }
   }
 
   .item-icon {

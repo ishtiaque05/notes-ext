@@ -93,10 +93,12 @@ function renderItem(item: CapturedItem): HTMLLIElement {
   const li = document.createElement('li');
   li.className = 'item';
   li.dataset.itemId = item.id;
+  li.draggable = true;
 
   if (item.type === 'link' && 'text' in item.metadata) {
     li.innerHTML = `
       <div class="item-content">
+        <span class="item-drag-handle" title="Drag to reorder">⋮⋮</span>
         <span class="item-icon link-icon">🔗</span>
         <div class="item-text">
           <div class="item-title">${escapeHtml(item.metadata.text)}</div>
@@ -110,6 +112,7 @@ function renderItem(item: CapturedItem): HTMLLIElement {
   } else if (item.type === 'image' && 'alt' in item.metadata) {
     li.innerHTML = `
       <div class="item-content">
+        <span class="item-drag-handle" title="Drag to reorder">⋮⋮</span>
         <img class="item-thumbnail" src="${escapeHtml(item.content)}" alt="${escapeHtml(item.metadata.alt)}" />
         <div class="item-text">
           <div class="item-title">${escapeHtml(item.metadata.alt)}</div>
@@ -129,6 +132,14 @@ function renderItem(item: CapturedItem): HTMLLIElement {
       void handleDeleteItem(item.id);
     });
   }
+
+  // Add drag event listeners
+  li.addEventListener('dragstart', handleDragStart);
+  li.addEventListener('dragover', handleDragOver);
+  li.addEventListener('drop', handleDrop);
+  li.addEventListener('dragend', handleDragEnd);
+  li.addEventListener('dragenter', handleDragEnter);
+  li.addEventListener('dragleave', handleDragLeave);
 
   return li;
 }
@@ -235,4 +246,129 @@ async function handleClearAll() {
 // Handle save as PDF (placeholder for now)
 function handleSavePdf() {
   alert('PDF export will be implemented in a future commit!');
+}
+
+// Drag and drop state
+let draggedElement: HTMLElement | null = null;
+let draggedItemId: string | null = null;
+
+// Handle drag start
+function handleDragStart(event: DragEvent) {
+  const target = event.currentTarget as HTMLElement;
+  draggedElement = target;
+  draggedItemId = target.dataset.itemId || null;
+
+  target.classList.add('dragging');
+
+  // Set drag data
+  if (event.dataTransfer) {
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/html', target.innerHTML);
+  }
+}
+
+// Handle drag over
+function handleDragOver(event: DragEvent) {
+  event.preventDefault();
+
+  if (event.dataTransfer) {
+    event.dataTransfer.dropEffect = 'move';
+  }
+
+  return false;
+}
+
+// Handle drag enter
+function handleDragEnter(event: DragEvent) {
+  const target = event.currentTarget as HTMLElement;
+
+  // Don't add class to the dragged element itself
+  if (target !== draggedElement) {
+    target.classList.add('drag-over');
+  }
+}
+
+// Handle drag leave
+function handleDragLeave(event: DragEvent) {
+  const target = event.currentTarget as HTMLElement;
+  target.classList.remove('drag-over');
+}
+
+// Handle drop
+function handleDrop(event: DragEvent) {
+  event.preventDefault();
+  event.stopPropagation();
+
+  const target = event.currentTarget as HTMLElement;
+  target.classList.remove('drag-over');
+
+  // Don't do anything if dropping on itself
+  if (draggedElement === target || !draggedItemId) {
+    return false;
+  }
+
+  const targetItemId = target.dataset.itemId;
+  if (!targetItemId) {
+    return false;
+  }
+
+  // Find the indices of dragged and target items
+  const draggedIndex = capturedItems.findIndex((item) => item.id === draggedItemId);
+  const targetIndex = capturedItems.findIndex((item) => item.id === targetItemId);
+
+  if (draggedIndex === -1 || targetIndex === -1) {
+    return false;
+  }
+
+  // Reorder the items array
+  const reorderedItems = [...capturedItems];
+  const [draggedItem] = reorderedItems.splice(draggedIndex, 1);
+  reorderedItems.splice(targetIndex, 0, draggedItem);
+
+  // Update order property for all items
+  reorderedItems.forEach((item, index) => {
+    item.order = index;
+  });
+
+  // Update local state
+  capturedItems = reorderedItems;
+
+  // Update storage
+  void updateItemsOrder();
+
+  // Re-render
+  renderItems();
+
+  return false;
+}
+
+// Handle drag end
+function handleDragEnd(event: DragEvent) {
+  const target = event.currentTarget as HTMLElement;
+  target.classList.remove('dragging');
+
+  // Remove drag-over class from all items
+  document.querySelectorAll('.drag-over').forEach((element) => {
+    element.classList.remove('drag-over');
+  });
+
+  // Reset drag state
+  draggedElement = null;
+  draggedItemId = null;
+}
+
+// Update items order in storage
+async function updateItemsOrder() {
+  try {
+    const response = (await browser.runtime.sendMessage({
+      type: 'REORDER_ITEMS',
+      data: { items: capturedItems },
+    })) as { success: boolean };
+
+    if (!response.success) {
+      console.error('Failed to update items order');
+    }
+  } catch (error) {
+    console.error('Failed to update items order:', error);
+  }
 }
