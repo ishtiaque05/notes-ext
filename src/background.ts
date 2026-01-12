@@ -11,11 +11,14 @@ import type {
 
 const STORAGE_KEY = 'notesCollectorData';
 
+// Runtime state for disabled tabs (not persisted)
+const disabledTabs = new Set<number>();
+
 if (process.env.NODE_ENV === 'development') {
   console.warn('Notes Collector: Background service worker initialized');
 }
 
-// Initialize storage on extension install
+// Initialize storage and context menu on extension install
 browser.runtime.onInstalled.addListener(() => {
   void (async () => {
     if (process.env.NODE_ENV === 'development') {
@@ -31,8 +34,65 @@ browser.runtime.onInstalled.addListener(() => {
       };
       await browser.storage.local.set({ [STORAGE_KEY]: initialData });
     }
+
+    // Create context menu
+    createContextMenu();
   })();
 });
+
+// Create context menu for toggling extension on/off
+function createContextMenu() {
+  browser.contextMenus.create({
+    id: 'toggle-notes-collector',
+    title: 'Disable Notes Collector on this page',
+    contexts: ['page', 'selection', 'link', 'image'],
+  });
+}
+
+// Handle context menu clicks
+browser.contextMenus.onClicked.addListener(
+  (info: browser.contextMenus.OnClickData, tab?: browser.tabs.Tab) => {
+    if (info.menuItemId === 'toggle-notes-collector' && tab?.id) {
+      void toggleSiteEnabled(tab.id);
+    }
+  }
+);
+
+// Update context menu when tab changes
+browser.tabs.onActivated.addListener((activeInfo) => {
+  const isDisabled = disabledTabs.has(activeInfo.tabId);
+  void updateContextMenu(isDisabled);
+});
+
+// Toggle site enabled/disabled for current tab
+async function toggleSiteEnabled(tabId: number) {
+  const isDisabled = disabledTabs.has(tabId);
+
+  if (isDisabled) {
+    disabledTabs.delete(tabId);
+    await updateContextMenu(false);
+  } else {
+    disabledTabs.add(tabId);
+    await updateContextMenu(true);
+  }
+
+  // Notify content script
+  await browser.tabs.sendMessage(tabId, {
+    type: 'SITE_ENABLED_CHANGED',
+    enabled: !disabledTabs.has(tabId),
+  }).catch(() => {
+    // Content script might not be ready, ignore
+  });
+}
+
+// Update context menu title based on state
+async function updateContextMenu(isDisabled: boolean) {
+  await browser.contextMenus.update('toggle-notes-collector', {
+    title: isDisabled
+      ? 'Enable Notes Collector on this page'
+      : 'Disable Notes Collector on this page',
+  });
+}
 
 // Handle messages from content script and sidebar
 browser.runtime.onMessage.addListener((message: Message): Promise<MessageResponse> | void => {
