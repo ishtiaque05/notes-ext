@@ -331,28 +331,175 @@ function handleSavePdf() {
     return;
   }
 
-  // Test: Create a simple PDF
-  const docDefinition = {
-    content: [
-      { text: 'Notes Collector Export', style: 'header' },
-      { text: 'This is a test PDF generation', style: 'subheader' },
-      { text: `Total items: ${capturedItems.length}` },
-    ],
-    styles: {
-      header: {
-        fontSize: 18,
-        bold: true,
-        margin: [0, 0, 0, 10],
-      },
-      subheader: {
-        fontSize: 14,
-        margin: [0, 10, 0, 5],
-      },
-    },
-  };
+  if (capturedItems.length === 0) {
+    alert('No items to export');
+    return;
+  }
+
+  // Build PDF document
+  const docDefinition = buildPdfDocument();
+
+  // Generate filename with timestamp
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+  const filename = `notes-${timestamp}.pdf`;
 
   // Create and download PDF
-  pdfMake.createPdf(docDefinition).download('notes-test.pdf');
+  pdfMake.createPdf(docDefinition).download(filename);
+}
+
+// Build PDF document definition from captured items
+function buildPdfDocument() {
+  const content: any[] = [];
+
+  // Add header with timestamp
+  const now = new Date();
+  const dateStr = now.toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+
+  content.push(
+    { text: 'Notes Collector Export', style: 'title' },
+    { text: dateStr, style: 'subtitle' },
+    { text: `Total items: ${capturedItems.length}`, style: 'subtitle', margin: [0, 0, 0, 20] }
+  );
+
+  // Sort items by order
+  const sortedItems = [...capturedItems].sort((a, b) => a.order - b.order);
+
+  // Add each item
+  sortedItems.forEach((item, index) => {
+    // Add item number
+    content.push({
+      text: `${index + 1}.`,
+      style: 'itemNumber',
+      margin: [0, 10, 0, 5],
+    });
+
+    if (item.type === 'link' && 'href' in item.metadata) {
+      // Add clickable link
+      content.push({
+        text: item.metadata.text || item.metadata.href,
+        link: item.metadata.href,
+        style: 'link',
+        margin: [10, 0, 0, 2],
+      });
+
+      // Add URL below if text is different
+      if (item.metadata.text && item.metadata.text !== item.metadata.href) {
+        content.push({
+          text: item.metadata.href,
+          style: 'url',
+          margin: [10, 0, 0, 0],
+        });
+      }
+    } else if (item.type === 'image' && 'alt' in item.metadata) {
+      // Add image
+      try {
+        content.push({
+          image: item.content, // data URL
+          width: 400,
+          margin: [10, 0, 0, 5],
+        });
+
+        // Add alt text and source URL
+        if (item.metadata.alt) {
+          content.push({
+            text: item.metadata.alt,
+            style: 'imageCaption',
+            margin: [10, 5, 0, 2],
+          });
+        }
+
+        content.push({
+          text: item.metadata.originalSrc,
+          style: 'url',
+          margin: [10, 0, 0, 0],
+        });
+      } catch (error) {
+        // Fallback if image fails to embed
+        content.push({
+          text: `[Image: ${item.metadata.alt || 'No description'}]`,
+          style: 'error',
+          margin: [10, 0, 0, 2],
+        });
+        content.push({
+          text: item.metadata.originalSrc,
+          style: 'url',
+          margin: [10, 0, 0, 0],
+        });
+      }
+    } else if (item.type === 'text' && 'sourceUrl' in item.metadata) {
+      // Add captured text
+      content.push({
+        text: item.metadata.text,
+        style: 'capturedText',
+        margin: [10, 0, 0, 5],
+      });
+
+      // Add source URL
+      content.push({
+        text: `Source: ${item.metadata.sourceUrl}`,
+        style: 'url',
+        margin: [10, 0, 0, 0],
+      });
+    }
+  });
+
+  // Return document definition
+  return {
+    content,
+    styles: {
+      title: {
+        fontSize: 22,
+        bold: true,
+        margin: [0, 0, 0, 5],
+      },
+      subtitle: {
+        fontSize: 11,
+        color: '#666666',
+        margin: [0, 0, 0, 2],
+      },
+      itemNumber: {
+        fontSize: 14,
+        bold: true,
+        color: '#333333',
+      },
+      link: {
+        fontSize: 12,
+        color: '#0066cc',
+        decoration: 'underline',
+      },
+      url: {
+        fontSize: 9,
+        color: '#666666',
+        italics: true,
+      },
+      imageCaption: {
+        fontSize: 10,
+        color: '#333333',
+        italics: true,
+      },
+      capturedText: {
+        fontSize: 11,
+        color: '#000000',
+        background: '#f5f5f5',
+        margin: [5, 5, 5, 5],
+      },
+      error: {
+        fontSize: 11,
+        color: '#cc0000',
+        italics: true,
+      },
+    },
+    defaultStyle: {
+      font: 'Roboto',
+    },
+    pageMargins: [40, 60, 40, 60],
+  };
 }
 
 // Handle toggle enabled/disabled
