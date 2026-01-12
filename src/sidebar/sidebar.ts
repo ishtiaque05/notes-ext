@@ -40,6 +40,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // Load items from storage
     await loadItems();
 
+    // Check if extension is enabled for current tab
+    await checkEnabledState();
+
     // Set up event listeners
     savePdfBtn.addEventListener('click', () => {
       void handleSavePdf();
@@ -71,6 +74,30 @@ async function loadItems() {
     }
   } catch (error) {
     console.error('Failed to load items:', error);
+  }
+}
+
+// Check if extension is enabled for current tab
+async function checkEnabledState() {
+  if (!currentTabId) {
+    return;
+  }
+
+  try {
+    const response = (await browser.runtime.sendMessage({
+      type: 'CHECK_SITE_ENABLED',
+      data: { tabId: currentTabId },
+    })) as {
+      success: boolean;
+      data?: { enabled: boolean };
+    };
+
+    if (response.success && response.data) {
+      isExtensionEnabled = response.data.enabled;
+      updateToggleButton();
+    }
+  } catch (error) {
+    console.error('Failed to check enabled state:', error);
   }
 }
 
@@ -137,9 +164,10 @@ function renderItem(item: CapturedItem): HTMLLIElement {
       </div>
     `;
   } else if (item.type === 'text' && 'sourceUrl' in item.metadata) {
-    const truncatedText = item.metadata.text.length > 100
-      ? item.metadata.text.substring(0, 100) + '...'
-      : item.metadata.text;
+    const truncatedText =
+      item.metadata.text.length > 100
+        ? item.metadata.text.substring(0, 100) + '...'
+        : item.metadata.text;
 
     li.innerHTML = `
       <div class="item-content">
@@ -210,6 +238,8 @@ function updateUI() {
 
 // Handle messages from background script
 function handleBackgroundMessage(message: { type: string; data?: unknown }) {
+  console.log('=== SIDEBAR RECEIVED MESSAGE ===', message);
+
   if (
     message.type === 'ITEM_ADDED' &&
     message.data &&
@@ -234,6 +264,16 @@ function handleBackgroundMessage(message: { type: string; data?: unknown }) {
     capturedItems = [];
     renderItems();
     updateUI();
+  } else if (
+    message.type === 'SITE_ENABLED_CHANGED' &&
+    message.data &&
+    typeof message.data === 'object' &&
+    'enabled' in message.data
+  ) {
+    const data = message.data as { enabled: boolean };
+    console.log('=== UPDATING ENABLED STATE TO:', data.enabled);
+    isExtensionEnabled = data.enabled;
+    updateToggleButton();
   }
 }
 
@@ -287,21 +327,27 @@ function handleSavePdf() {
 
 // Handle toggle enabled/disabled
 async function handleToggleEnabled() {
+  console.log('=== BUTTON CLICKED ===');
+
   if (!currentTabId) {
     alert('Could not determine current tab');
     return;
   }
 
+  console.log('Current tab ID:', currentTabId);
+  console.log('Current enabled state BEFORE:', isExtensionEnabled);
+
   try {
     // Send message to background to toggle state
-    await browser.runtime.sendMessage({
+    const response = await browser.runtime.sendMessage({
       type: 'TOGGLE_SITE_ENABLED',
       data: { tabId: currentTabId },
     });
 
-    // Toggle local state
-    isExtensionEnabled = !isExtensionEnabled;
-    updateToggleButton();
+    console.log('Toggle response:', response);
+
+    // After toggling, check the new state
+    await checkEnabledState();
   } catch (error) {
     console.error('Failed to toggle extension state:', error);
   }
@@ -311,6 +357,8 @@ async function handleToggleEnabled() {
 function updateToggleButton() {
   const iconSpan = toggleEnabledBtn.querySelector('.toggle-icon');
   const textSpan = toggleEnabledBtn.querySelector('.toggle-text');
+
+  console.log('updateToggleButton called, isExtensionEnabled:', isExtensionEnabled);
 
   if (isExtensionEnabled) {
     toggleEnabledBtn.classList.remove('disabled');
