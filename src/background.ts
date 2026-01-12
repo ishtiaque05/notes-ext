@@ -6,6 +6,7 @@ import type {
   CapturedItem,
   LinkMetadata,
   ImageMetadata,
+  TextMetadata,
 } from './types';
 
 const STORAGE_KEY = 'notesCollectorData';
@@ -44,6 +45,8 @@ browser.runtime.onMessage.addListener((message: Message): Promise<MessageRespons
       return handleCaptureLink(message.data);
     case 'CAPTURE_IMAGE':
       return handleCaptureImage(message.data);
+    case 'CAPTURE_TEXT':
+      return handleCaptureText(message.data);
     case 'GET_ITEMS':
       return handleGetItems();
     case 'DELETE_ITEM':
@@ -127,6 +130,41 @@ async function handleCaptureImage(data: {
     return { success: true, data: newItem };
   } catch (error) {
     console.error('Error capturing image:', error);
+    return { success: false, error: String(error) };
+  }
+}
+
+// Handler for capturing text
+async function handleCaptureText(data: {
+  text: string;
+  sourceUrl: string;
+}): Promise<MessageResponse<CapturedItem>> {
+  try {
+    const storageData = await getStorageData();
+
+    const newItem: CapturedItem = {
+      id: crypto.randomUUID(),
+      type: 'text',
+      order: storageData.nextOrder,
+      timestamp: Date.now(),
+      content: data.text,
+      metadata: {
+        text: data.text,
+        sourceUrl: data.sourceUrl,
+      } as TextMetadata,
+    };
+
+    storageData.items.push(newItem);
+    storageData.nextOrder++;
+
+    await browser.storage.local.set({ [STORAGE_KEY]: storageData });
+
+    // Notify sidebar of new item
+    notifySidebar({ type: 'ITEM_ADDED', data: newItem });
+
+    return { success: true, data: newItem };
+  } catch (error) {
+    console.error('Error capturing text:', error);
     return { success: false, error: String(error) };
   }
 }
