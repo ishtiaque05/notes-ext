@@ -68,9 +68,9 @@ browser.tabs.onActivated.addListener((activeInfo) => {
 async function toggleSiteEnabled(tabId: number) {
   const isDisabled = disabledTabs.has(tabId);
 
-  console.log('=== BACKGROUND: toggleSiteEnabled called ===');
-  console.log('Tab ID:', tabId);
-  console.log('Is currently disabled:', isDisabled);
+  console.warn('=== BACKGROUND: toggleSiteEnabled called ===');
+  console.warn('Tab ID:', tabId);
+  console.warn('Is currently disabled:', isDisabled);
 
   if (isDisabled) {
     disabledTabs.delete(tabId);
@@ -83,8 +83,8 @@ async function toggleSiteEnabled(tabId: number) {
   // Calculate new state after toggling
   const newEnabledState = !disabledTabs.has(tabId);
 
-  console.log('=== BACKGROUND: New enabled state:', newEnabledState);
-  console.log('Disabled tabs:', Array.from(disabledTabs));
+  console.warn('=== BACKGROUND: New enabled state:', newEnabledState);
+  console.warn('Disabled tabs:', Array.from(disabledTabs));
 
   // Notify content script
   await browser.tabs
@@ -96,7 +96,7 @@ async function toggleSiteEnabled(tabId: number) {
       // Content script might not be ready, ignore
     });
 
-  console.log('=== BACKGROUND: Notifying sidebar ===');
+  console.warn('=== BACKGROUND: Notifying sidebar ===');
   // Notify sidebar
   notifySidebar({
     type: 'SITE_ENABLED_CHANGED',

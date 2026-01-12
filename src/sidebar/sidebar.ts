@@ -238,7 +238,7 @@ function updateUI() {
 
 // Handle messages from background script
 function handleBackgroundMessage(message: { type: string; data?: unknown }) {
-  console.log('=== SIDEBAR RECEIVED MESSAGE ===', message);
+  console.warn('=== SIDEBAR RECEIVED MESSAGE ===', message);
 
   if (
     message.type === 'ITEM_ADDED' &&
@@ -271,7 +271,7 @@ function handleBackgroundMessage(message: { type: string; data?: unknown }) {
     'enabled' in message.data
   ) {
     const data = message.data as { enabled: boolean };
-    console.log('=== UPDATING ENABLED STATE TO:', data.enabled);
+    console.warn('=== UPDATING ENABLED STATE TO:', data.enabled);
     isExtensionEnabled = data.enabled;
     updateToggleButton();
   }
@@ -327,24 +327,24 @@ function handleSavePdf() {
 
 // Handle toggle enabled/disabled
 async function handleToggleEnabled() {
-  console.log('=== BUTTON CLICKED ===');
+  console.warn('=== BUTTON CLICKED ===');
 
   if (!currentTabId) {
     alert('Could not determine current tab');
     return;
   }
 
-  console.log('Current tab ID:', currentTabId);
-  console.log('Current enabled state BEFORE:', isExtensionEnabled);
+  console.warn('Current tab ID:', currentTabId);
+  console.warn('Current enabled state BEFORE:', isExtensionEnabled);
 
   try {
     // Send message to background to toggle state
-    const response = await browser.runtime.sendMessage({
+    const response = (await browser.runtime.sendMessage({
       type: 'TOGGLE_SITE_ENABLED',
       data: { tabId: currentTabId },
-    });
+    })) as { success: boolean };
 
-    console.log('Toggle response:', response);
+    console.warn('Toggle response:', response);
 
     // After toggling, check the new state
     await checkEnabledState();
@@ -358,7 +358,7 @@ function updateToggleButton() {
   const iconSpan = toggleEnabledBtn.querySelector('.toggle-icon');
   const textSpan = toggleEnabledBtn.querySelector('.toggle-text');
 
-  console.log('updateToggleButton called, isExtensionEnabled:', isExtensionEnabled);
+  console.warn('updateToggleButton called, isExtensionEnabled:', isExtensionEnabled);
 
   if (isExtensionEnabled) {
     toggleEnabledBtn.classList.remove('disabled');
