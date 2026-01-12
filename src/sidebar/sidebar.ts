@@ -3,11 +3,14 @@ import './sidebar.scss';
 import type { CapturedItem } from '../types';
 
 let capturedItems: CapturedItem[] = [];
+let isExtensionEnabled = true;
+let currentTabId: number | null = null;
 
 // DOM elements
 let itemsContainer: HTMLElement;
 let savePdfBtn: HTMLButtonElement;
 let clearAllBtn: HTMLButtonElement;
+let toggleEnabledBtn: HTMLButtonElement;
 let subtitle: HTMLElement;
 
 if (process.env.NODE_ENV === 'development') {
@@ -25,10 +28,20 @@ document.addEventListener('DOMContentLoaded', () => {
     itemsContainer = document.getElementById('items-container')!;
     savePdfBtn = document.getElementById('save-pdf-btn') as HTMLButtonElement;
     clearAllBtn = document.getElementById('clear-all-btn') as HTMLButtonElement;
+    toggleEnabledBtn = document.getElementById('toggle-enabled-btn') as HTMLButtonElement;
     subtitle = document.querySelector('.subtitle')!;
+
+    // Get current tab ID
+    const tabs = await browser.tabs.query({ active: true, currentWindow: true });
+    if (tabs[0]?.id) {
+      currentTabId = tabs[0].id;
+    }
 
     // Load items from storage
     await loadItems();
+
+    // Check if extension is enabled for current tab
+    await checkEnabledState();
 
     // Set up event listeners
     savePdfBtn.addEventListener('click', () => {
@@ -36,6 +49,9 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     clearAllBtn.addEventListener('click', () => {
       void handleClearAll();
+    });
+    toggleEnabledBtn.addEventListener('click', () => {
+      void handleToggleEnabled();
     });
 
     // Listen for new items from background script
@@ -58,6 +74,30 @@ async function loadItems() {
     }
   } catch (error) {
     console.error('Failed to load items:', error);
+  }
+}
+
+// Check if extension is enabled for current tab
+async function checkEnabledState() {
+  if (!currentTabId) {
+    return;
+  }
+
+  try {
+    const response = (await browser.runtime.sendMessage({
+      type: 'CHECK_SITE_ENABLED',
+      data: { tabId: currentTabId },
+    })) as {
+      success: boolean;
+      data?: { enabled: boolean };
+    };
+
+    if (response.success && response.data) {
+      isExtensionEnabled = response.data.enabled;
+      updateToggleButton();
+    }
+  } catch (error) {
+    console.error('Failed to check enabled state:', error);
   }
 }
 
@@ -124,9 +164,10 @@ function renderItem(item: CapturedItem): HTMLLIElement {
       </div>
     `;
   } else if (item.type === 'text' && 'sourceUrl' in item.metadata) {
-    const truncatedText = item.metadata.text.length > 100
-      ? item.metadata.text.substring(0, 100) + '...'
-      : item.metadata.text;
+    const truncatedText =
+      item.metadata.text.length > 100
+        ? item.metadata.text.substring(0, 100) + '...'
+        : item.metadata.text;
 
     li.innerHTML = `
       <div class="item-content">
@@ -197,6 +238,8 @@ function updateUI() {
 
 // Handle messages from background script
 function handleBackgroundMessage(message: { type: string; data?: unknown }) {
+  console.warn('=== SIDEBAR RECEIVED MESSAGE ===', message);
+
   if (
     message.type === 'ITEM_ADDED' &&
     message.data &&
@@ -221,6 +264,16 @@ function handleBackgroundMessage(message: { type: string; data?: unknown }) {
     capturedItems = [];
     renderItems();
     updateUI();
+  } else if (
+    message.type === 'SITE_ENABLED_CHANGED' &&
+    message.data &&
+    typeof message.data === 'object' &&
+    'enabled' in message.data
+  ) {
+    const data = message.data as { enabled: boolean };
+    console.warn('=== UPDATING ENABLED STATE TO:', data.enabled);
+    isExtensionEnabled = data.enabled;
+    updateToggleButton();
   }
 }
 
@@ -270,6 +323,54 @@ async function handleClearAll() {
 // Handle save as PDF (placeholder for now)
 function handleSavePdf() {
   alert('PDF export will be implemented in a future commit!');
+}
+
+// Handle toggle enabled/disabled
+async function handleToggleEnabled() {
+  console.warn('=== BUTTON CLICKED ===');
+
+  if (!currentTabId) {
+    alert('Could not determine current tab');
+    return;
+  }
+
+  console.warn('Current tab ID:', currentTabId);
+  console.warn('Current enabled state BEFORE:', isExtensionEnabled);
+
+  try {
+    // Send message to background to toggle state
+    const response = (await browser.runtime.sendMessage({
+      type: 'TOGGLE_SITE_ENABLED',
+      data: { tabId: currentTabId },
+    })) as { success: boolean };
+
+    console.warn('Toggle response:', response);
+
+    // After toggling, check the new state
+    await checkEnabledState();
+  } catch (error) {
+    console.error('Failed to toggle extension state:', error);
+  }
+}
+
+// Update toggle button appearance
+function updateToggleButton() {
+  const iconSpan = toggleEnabledBtn.querySelector('.toggle-icon');
+  const textSpan = toggleEnabledBtn.querySelector('.toggle-text');
+
+  console.warn('updateToggleButton called, isExtensionEnabled:', isExtensionEnabled);
+
+  if (isExtensionEnabled) {
+    toggleEnabledBtn.classList.remove('disabled');
+    toggleEnabledBtn.title = 'Disable extension on current page';
+    if (iconSpan) iconSpan.textContent = '✓';
+    if (textSpan) textSpan.textContent = 'Enabled';
+  } else {
+    toggleEnabledBtn.classList.add('disabled');
+    toggleEnabledBtn.title = 'Enable extension on current page';
+    if (iconSpan) iconSpan.textContent = '✕';
+    if (textSpan) textSpan.textContent = 'Disabled';
+  }
 }
 
 // Drag and drop state

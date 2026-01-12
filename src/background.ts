@@ -11,11 +11,14 @@ import type {
 
 const STORAGE_KEY = 'notesCollectorData';
 
+// Runtime state for disabled tabs (not persisted)
+const disabledTabs = new Set<number>();
+
 if (process.env.NODE_ENV === 'development') {
   console.warn('Notes Collector: Background service worker initialized');
 }
 
-// Initialize storage on extension install
+// Initialize storage and context menu on extension install
 browser.runtime.onInstalled.addListener(() => {
   void (async () => {
     if (process.env.NODE_ENV === 'development') {
@@ -31,8 +34,84 @@ browser.runtime.onInstalled.addListener(() => {
       };
       await browser.storage.local.set({ [STORAGE_KEY]: initialData });
     }
+
+    // Create context menu
+    createContextMenu();
   })();
 });
+
+// Create context menu for toggling extension on/off
+function createContextMenu() {
+  browser.contextMenus.create({
+    id: 'toggle-notes-collector',
+    title: 'Disable Notes Collector on this page',
+    contexts: ['page', 'selection', 'link', 'image'],
+  });
+}
+
+// Handle context menu clicks
+browser.contextMenus.onClicked.addListener(
+  (info: browser.contextMenus.OnClickData, tab?: browser.tabs.Tab) => {
+    if (info.menuItemId === 'toggle-notes-collector' && tab?.id) {
+      void toggleSiteEnabled(tab.id);
+    }
+  }
+);
+
+// Update context menu when tab changes
+browser.tabs.onActivated.addListener((activeInfo) => {
+  const isDisabled = disabledTabs.has(activeInfo.tabId);
+  void updateContextMenu(isDisabled);
+});
+
+// Toggle site enabled/disabled for current tab
+async function toggleSiteEnabled(tabId: number) {
+  const isDisabled = disabledTabs.has(tabId);
+
+  console.warn('=== BACKGROUND: toggleSiteEnabled called ===');
+  console.warn('Tab ID:', tabId);
+  console.warn('Is currently disabled:', isDisabled);
+
+  if (isDisabled) {
+    disabledTabs.delete(tabId);
+    await updateContextMenu(false);
+  } else {
+    disabledTabs.add(tabId);
+    await updateContextMenu(true);
+  }
+
+  // Calculate new state after toggling
+  const newEnabledState = !disabledTabs.has(tabId);
+
+  console.warn('=== BACKGROUND: New enabled state:', newEnabledState);
+  console.warn('Disabled tabs:', Array.from(disabledTabs));
+
+  // Notify content script
+  await browser.tabs
+    .sendMessage(tabId, {
+      type: 'SITE_ENABLED_CHANGED',
+      enabled: newEnabledState,
+    })
+    .catch(() => {
+      // Content script might not be ready, ignore
+    });
+
+  console.warn('=== BACKGROUND: Notifying sidebar ===');
+  // Notify sidebar
+  notifySidebar({
+    type: 'SITE_ENABLED_CHANGED',
+    data: { enabled: newEnabledState },
+  });
+}
+
+// Update context menu title based on state
+async function updateContextMenu(isDisabled: boolean) {
+  await browser.contextMenus.update('toggle-notes-collector', {
+    title: isDisabled
+      ? 'Enable Notes Collector on this page'
+      : 'Disable Notes Collector on this page',
+  });
+}
 
 // Handle messages from content script and sidebar
 browser.runtime.onMessage.addListener((message: Message): Promise<MessageResponse> | void => {
@@ -55,6 +134,17 @@ browser.runtime.onMessage.addListener((message: Message): Promise<MessageRespons
       return handleReorderItems(message.data.items);
     case 'CLEAR_ALL':
       return handleClearAll();
+    case 'TOGGLE_SITE_ENABLED':
+      if ('tabId' in message.data) {
+        void toggleSiteEnabled(message.data.tabId);
+      }
+      return Promise.resolve({ success: true });
+    case 'CHECK_SITE_ENABLED':
+      if ('tabId' in message.data) {
+        const enabled = !disabledTabs.has(message.data.tabId);
+        return Promise.resolve({ success: true, data: { enabled } });
+      }
+      return Promise.resolve({ success: false, error: 'No tabId provided' });
     default:
       return Promise.resolve({ success: false, error: 'Unknown message type' });
   }

@@ -3,6 +3,9 @@ import './content.scss';
 
 const HIGHLIGHT_CLASS = 'notes-collector-highlight';
 
+// Track if extension is enabled for this page
+let isEnabled = true;
+
 // Add hover highlighting for links and images
 function addHoverListeners() {
   // Use event delegation on document for better performance
@@ -11,7 +14,27 @@ function addHoverListeners() {
   document.addEventListener('click', handleClick);
 }
 
+// Listen for enable/disable messages from background
+browser.runtime.onMessage.addListener((message: { type: string; enabled?: boolean }) => {
+  if (message.type === 'SITE_ENABLED_CHANGED') {
+    isEnabled = message.enabled ?? true;
+    updateDisabledState();
+  }
+});
+
+// Update visual state when extension is disabled
+function updateDisabledState() {
+  if (!isEnabled) {
+    // Remove all highlights
+    document.querySelectorAll(`.${HIGHLIGHT_CLASS}`).forEach((el) => {
+      el.classList.remove(HIGHLIGHT_CLASS);
+    });
+  }
+}
+
 function handleMouseOver(event: MouseEvent) {
+  if (!isEnabled) return;
+
   const target = event.target as HTMLElement;
 
   // Check if target is a link or image
@@ -61,6 +84,8 @@ function getTextContent(element: HTMLElement): string | null {
 }
 
 function handleClick(event: MouseEvent) {
+  if (!isEnabled) return;
+
   const target = event.target as HTMLElement;
 
   // Check if there's selected text - capture it with Ctrl+Click (or Cmd+Click on Mac)
