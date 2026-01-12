@@ -43,8 +43,33 @@ function isCapturableElement(element: HTMLElement): boolean {
   return false;
 }
 
+function getTextContent(element: HTMLElement): string | null {
+  // Get the direct text content of the element, excluding child elements
+  let text = element.textContent?.trim() || '';
+
+  // Filter out very short text (likely not useful)
+  if (text.length < 3) {
+    return null;
+  }
+
+  // Limit to reasonable length (10000 characters max)
+  if (text.length > 10000) {
+    text = text.substring(0, 10000);
+  }
+
+  return text;
+}
+
 function handleClick(event: MouseEvent) {
   const target = event.target as HTMLElement;
+
+  // Check if there's selected text - capture it with Ctrl+Click (or Cmd+Click on Mac)
+  const selection = window.getSelection();
+  if (selection && selection.toString().trim() && (event.ctrlKey || event.metaKey)) {
+    event.preventDefault();
+    void captureText(selection.toString().trim());
+    return;
+  }
 
   // Handle link clicks
   if (target.tagName === 'A') {
@@ -53,6 +78,7 @@ function handleClick(event: MouseEvent) {
       event.preventDefault(); // Prevent default navigation
       void captureLink(link);
     }
+    return;
   }
 
   // Handle image clicks
@@ -61,6 +87,16 @@ function handleClick(event: MouseEvent) {
     if (img.src) {
       event.preventDefault(); // Prevent default behavior
       void captureImage(img);
+    }
+    return;
+  }
+
+  // Handle text element clicks with Ctrl+Click (for non-link, non-image elements)
+  if (event.ctrlKey || event.metaKey) {
+    const textContent = getTextContent(target);
+    if (textContent) {
+      event.preventDefault();
+      void captureText(textContent);
     }
   }
 }
@@ -112,6 +148,21 @@ async function captureImage(img: HTMLImageElement) {
     } catch (fallbackError) {
       console.error('Fallback capture also failed:', fallbackError);
     }
+  }
+}
+
+async function captureText(text: string) {
+  try {
+    // Send message to background script to store the text
+    await browser.runtime.sendMessage({
+      type: 'CAPTURE_TEXT',
+      data: { text, sourceUrl: window.location.href },
+    });
+
+    // Visual feedback - show a temporary notification
+    showTextCaptureConfirmation();
+  } catch (error) {
+    console.error('Failed to capture text:', error);
   }
 }
 
@@ -184,6 +235,35 @@ function showCaptureConfirmation(element: HTMLElement) {
   setTimeout(() => {
     element.classList.remove('notes-collector-captured');
   }, 500);
+}
+
+function showTextCaptureConfirmation() {
+  // Create a temporary notification element
+  const notification = document.createElement('div');
+  notification.textContent = 'Text captured!';
+  notification.style.cssText = `
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: #4caf50;
+    color: white;
+    padding: 12px 20px;
+    border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    z-index: 999999;
+    font-family: system-ui, -apple-system, sans-serif;
+    font-size: 14px;
+    animation: slideIn 0.3s ease-out;
+  `;
+
+  document.body.appendChild(notification);
+
+  setTimeout(() => {
+    notification.style.animation = 'slideOut 0.3s ease-in';
+    setTimeout(() => {
+      document.body.removeChild(notification);
+    }, 300);
+  }, 2000);
 }
 
 // Initialize when DOM is ready

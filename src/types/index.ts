@@ -2,11 +2,11 @@
 
 export interface CapturedItem {
   id: string;
-  type: 'link' | 'image';
+  type: 'link' | 'image' | 'text';
   order: number;
   timestamp: number;
-  content: string; // URL or data URL
-  metadata: LinkMetadata | ImageMetadata;
+  content: string; // URL, data URL, or text content
+  metadata: LinkMetadata | ImageMetadata | TextMetadata;
 }
 
 export interface LinkMetadata {
@@ -19,6 +19,11 @@ export interface ImageMetadata {
   originalSrc: string;
 }
 
+export interface TextMetadata {
+  text: string;
+  sourceUrl: string; // URL of the page where text was captured
+}
+
 export interface StorageData {
   items: CapturedItem[];
   nextOrder: number;
@@ -28,6 +33,7 @@ export interface StorageData {
 export type Message =
   | { type: 'CAPTURE_LINK'; data: { href: string; text: string } }
   | { type: 'CAPTURE_IMAGE'; data: { src: string; alt: string; dataUrl: string } }
+  | { type: 'CAPTURE_TEXT'; data: { text: string; sourceUrl: string } }
   | { type: 'GET_ITEMS' }
   | { type: 'DELETE_ITEM'; data: { id: string } }
   | { type: 'REORDER_ITEMS'; data: { items: CapturedItem[] } }

@@ -68,7 +68,7 @@ function renderItems() {
 
   if (capturedItems.length === 0) {
     itemsContainer.innerHTML =
-      '<p class="empty-state">No items captured yet. Click on links or images to capture them.</p>';
+      '<p class="empty-state">No items captured yet. Click on links/images or Ctrl+Click selected text to capture.</p>';
     return;
   }
 
@@ -95,7 +95,7 @@ function renderItem(item: CapturedItem): HTMLLIElement {
   li.dataset.itemId = item.id;
   li.draggable = true;
 
-  if (item.type === 'link' && 'text' in item.metadata) {
+  if (item.type === 'link' && 'href' in item.metadata) {
     li.innerHTML = `
       <div class="item-content">
         <span class="item-drag-handle" title="Drag to reorder">⋮⋮</span>
@@ -117,6 +117,24 @@ function renderItem(item: CapturedItem): HTMLLIElement {
         <div class="item-text">
           <div class="item-title">${escapeHtml(item.metadata.alt)}</div>
           <div class="item-url">${escapeHtml(item.metadata.originalSrc)}</div>
+        </div>
+      </div>
+      <div class="item-actions">
+        <button class="delete-btn" title="Delete" data-id="${item.id}">✕</button>
+      </div>
+    `;
+  } else if (item.type === 'text' && 'sourceUrl' in item.metadata) {
+    const truncatedText = item.metadata.text.length > 100
+      ? item.metadata.text.substring(0, 100) + '...'
+      : item.metadata.text;
+
+    li.innerHTML = `
+      <div class="item-content">
+        <span class="item-drag-handle" title="Drag to reorder">⋮⋮</span>
+        <span class="item-icon text-icon">📝</span>
+        <div class="item-text">
+          <div class="item-title">${escapeHtml(truncatedText)}</div>
+          <div class="item-url">${escapeHtml(item.metadata.sourceUrl)}</div>
         </div>
       </div>
       <div class="item-actions">
@@ -163,11 +181,17 @@ function updateUI() {
   const count = capturedItems.length;
   const linkCount = capturedItems.filter((item) => item.type === 'link').length;
   const imageCount = capturedItems.filter((item) => item.type === 'image').length;
+  const textCount = capturedItems.filter((item) => item.type === 'text').length;
 
   if (count === 0) {
     subtitle.textContent = 'Captured items will appear here';
   } else {
-    subtitle.textContent = `${count} item${count !== 1 ? 's' : ''} (${linkCount} link${linkCount !== 1 ? 's' : ''}, ${imageCount} image${imageCount !== 1 ? 's' : ''})`;
+    const parts = [];
+    if (linkCount > 0) parts.push(`${linkCount} link${linkCount !== 1 ? 's' : ''}`);
+    if (imageCount > 0) parts.push(`${imageCount} image${imageCount !== 1 ? 's' : ''}`);
+    if (textCount > 0) parts.push(`${textCount} text${textCount !== 1 ? 's' : ''}`);
+
+    subtitle.textContent = `${count} item${count !== 1 ? 's' : ''} (${parts.join(', ')})`;
   }
 }
 
