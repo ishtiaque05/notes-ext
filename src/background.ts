@@ -115,6 +115,17 @@ browser.runtime.onMessage.addListener((message: Message): Promise<MessageRespons
       return handleReorderItems(message.data.items);
     case 'CLEAR_ALL':
       return handleClearAll();
+    case 'TOGGLE_SITE_ENABLED':
+      if ('tabId' in message.data) {
+        void toggleSiteEnabled(message.data.tabId);
+      }
+      return Promise.resolve({ success: true });
+    case 'CHECK_SITE_ENABLED':
+      if ('tabId' in message.data) {
+        const enabled = !disabledTabs.has(message.data.tabId);
+        return Promise.resolve({ success: true, data: { enabled } });
+      }
+      return Promise.resolve({ success: false, error: 'No tabId provided' });
     default:
       return Promise.resolve({ success: false, error: 'Unknown message type' });
   }

@@ -38,8 +38,8 @@ export type Message =
   | { type: 'DELETE_ITEM'; data: { id: string } }
   | { type: 'REORDER_ITEMS'; data: { items: CapturedItem[] } }
   | { type: 'CLEAR_ALL' }
-  | { type: 'CHECK_SITE_ENABLED' }
-  | { type: 'TOGGLE_SITE_ENABLED' };
+  | { type: 'CHECK_SITE_ENABLED'; data: { tabId: number } }
+  | { type: 'TOGGLE_SITE_ENABLED'; data: { tabId: number } };
 
 export interface MessageResponse<T = unknown> {
   success: boolean;
