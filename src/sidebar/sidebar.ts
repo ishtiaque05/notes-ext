@@ -2,6 +2,10 @@
 import './sidebar.scss';
 import type { CapturedItem } from '../types';
 
+// pdfMake is loaded via script tag in sidebar.html
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+declare const pdfMake: any;
+
 let capturedItems: CapturedItem[] = [];
 let isExtensionEnabled = true;
 let currentTabId: number | null = null;
@@ -320,9 +324,35 @@ async function handleClearAll() {
   }
 }
 
-// Handle save as PDF (placeholder for now)
+// Handle save as PDF
 function handleSavePdf() {
-  alert('PDF export will be implemented in a future commit!');
+  if (typeof pdfMake === 'undefined') {
+    alert('PDF library not loaded. Please refresh the sidebar.');
+    return;
+  }
+
+  // Test: Create a simple PDF
+  const docDefinition = {
+    content: [
+      { text: 'Notes Collector Export', style: 'header' },
+      { text: 'This is a test PDF generation', style: 'subheader' },
+      { text: `Total items: ${capturedItems.length}` },
+    ],
+    styles: {
+      header: {
+        fontSize: 18,
+        bold: true,
+        margin: [0, 0, 0, 10],
+      },
+      subheader: {
+        fontSize: 14,
+        margin: [0, 10, 0, 5],
+      },
+    },
+  };
+
+  // Create and download PDF
+  pdfMake.createPdf(docDefinition).download('notes-test.pdf');
 }
 
 // Handle toggle enabled/disabled
