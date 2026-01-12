@@ -325,7 +325,7 @@ async function handleClearAll() {
 }
 
 // Handle save as PDF
-function handleSavePdf() {
+async function handleSavePdf() {
   if (typeof pdfMake === 'undefined') {
     alert('PDF library not loaded. Please refresh the sidebar.');
     return;
@@ -336,15 +336,57 @@ function handleSavePdf() {
     return;
   }
 
-  // Build PDF document
-  const docDefinition = buildPdfDocument();
+  try {
+    // Disable button to prevent multiple clicks
+    savePdfBtn.disabled = true;
+    savePdfBtn.textContent = 'Generating PDF...';
 
-  // Generate filename with timestamp
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
-  const filename = `notes-${timestamp}.pdf`;
+    // Build PDF document
+    const docDefinition = buildPdfDocument();
 
-  // Create and download PDF
-  pdfMake.createPdf(docDefinition).download(filename);
+    // Generate filename with timestamp
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+    const filename = `notes-${timestamp}.pdf`;
+
+    // Create PDF as blob
+    const pdfDocGenerator = pdfMake.createPdf(docDefinition);
+
+    pdfDocGenerator.getBlob((blob: Blob) => {
+      void (async () => {
+        try {
+          // Create object URL from blob
+          const url = URL.createObjectURL(blob);
+
+          // Use browser.downloads API to save with file picker
+          await browser.downloads.download({
+            url: url,
+            filename: filename,
+            saveAs: true, // Show file picker dialog
+          });
+
+          // Show success message
+          showNotification('PDF exported successfully!', 'success');
+
+          // Clean up object URL after a delay
+          setTimeout(() => {
+            URL.revokeObjectURL(url);
+          }, 1000);
+        } catch (error) {
+          console.error('Failed to save PDF:', error);
+          showNotification('Failed to save PDF. Please try again.', 'error');
+        } finally {
+          // Re-enable button
+          savePdfBtn.disabled = false;
+          savePdfBtn.textContent = 'Save as PDF';
+        }
+      })();
+    });
+  } catch (error) {
+    console.error('Failed to generate PDF:', error);
+    showNotification('Failed to generate PDF. Please try again.', 'error');
+    savePdfBtn.disabled = false;
+    savePdfBtn.textContent = 'Save as PDF';
+  }
 }
 
 // Build PDF document definition from captured items
@@ -673,4 +715,37 @@ async function updateItemsOrder() {
   } catch (error) {
     console.error('Failed to update items order:', error);
   }
+}
+
+// Show notification message
+function showNotification(message: string, type: 'success' | 'error') {
+  // Create notification element
+  const notification = document.createElement('div');
+  notification.className = `notification notification-${type}`;
+  notification.textContent = message;
+  notification.style.cssText = `
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    padding: 12px 20px;
+    border-radius: 4px;
+    color: white;
+    font-size: 14px;
+    font-weight: 500;
+    z-index: 10000;
+    animation: slideIn 0.3s ease-out;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    ${type === 'success' ? 'background-color: #28a745;' : 'background-color: #dc3545;'}
+  `;
+
+  // Add to DOM
+  document.body.appendChild(notification);
+
+  // Remove after 3 seconds
+  setTimeout(() => {
+    notification.style.animation = 'slideOut 0.3s ease-in';
+    setTimeout(() => {
+      document.body.removeChild(notification);
+    }, 300);
+  }, 3000);
 }
