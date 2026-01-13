@@ -16,8 +16,20 @@ function addHoverListeners() {
 
 // Listen for enable/disable messages from background
 browser.runtime.onMessage.addListener((message: { type: string; enabled?: boolean }) => {
+  if (process.env.NODE_ENV === 'development') {
+    console.warn('=== CONTENT: Received message ===');
+    console.warn('Message type:', message.type);
+    console.warn('Message enabled:', message.enabled);
+  }
+
   if (message.type === 'SITE_ENABLED_CHANGED') {
     isEnabled = message.enabled ?? true;
+
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('=== CONTENT: Extension state changed ===');
+      console.warn('New isEnabled state:', isEnabled);
+    }
+
     updateDisabledState();
   }
 });
@@ -204,7 +216,19 @@ function getTextContent(element: HTMLElement): string | null {
 }
 
 function handleClick(event: MouseEvent) {
-  if (!isEnabled) return;
+  if (process.env.NODE_ENV === 'development') {
+    console.warn('=== CONTENT: Click detected ===');
+    console.warn('isEnabled:', isEnabled);
+    console.warn('Ctrl/Meta:', event.ctrlKey || event.metaKey);
+    console.warn('Shift:', event.shiftKey);
+  }
+
+  if (!isEnabled) {
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('=== CONTENT: Extension is disabled, ignoring click ===');
+    }
+    return;
+  }
 
   const target = event.target as HTMLElement;
 
@@ -381,13 +405,13 @@ function showTextCaptureConfirmation() {
     z-index: 999999;
     font-family: system-ui, -apple-system, sans-serif;
     font-size: 14px;
-    animation: slideIn 0.3s ease-out;
+    animation: slide-in 0.3s ease-out;
   `;
 
   document.body.appendChild(notification);
 
   setTimeout(() => {
-    notification.style.animation = 'slideOut 0.3s ease-in';
+    notification.style.animation = 'slide-out 0.3s ease-in';
     setTimeout(() => {
       document.body.removeChild(notification);
     }, 300);

@@ -750,7 +750,7 @@ function showNotification(message: string, type: 'success' | 'error' | 'warning'
   // Remove after duration (5s for warnings, 3s for others)
   const duration = type === 'warning' ? 5000 : 3000;
   setTimeout(() => {
-    notification.style.animation = 'slideOut 0.3s ease-in';
+    notification.style.animation = 'slide-out 0.3s ease-in';
     setTimeout(() => {
       if (document.body.contains(notification)) {
         document.body.removeChild(notification);
