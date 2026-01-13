@@ -4,7 +4,10 @@
  * Base error class for Notes Collector errors
  */
 export class NotesCollectorError extends Error {
-  constructor(message: string, public readonly userMessage?: string) {
+  constructor(
+    message: string,
+    public readonly userMessage?: string
+  ) {
     super(message);
     this.name = this.constructor.name;
     Object.setPrototypeOf(this, new.target.prototype);

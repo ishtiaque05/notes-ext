@@ -294,17 +294,7 @@ async function cropImage(
       }
 
       // Draw the cropped portion
-      ctx.drawImage(
-        img,
-        rect.x,
-        rect.y,
-        rect.width,
-        rect.height,
-        0,
-        0,
-        rect.width,
-        rect.height
-      );
+      ctx.drawImage(img, rect.x, rect.y, rect.width, rect.height, 0, 0, rect.width, rect.height);
 
       // Convert to blob and then to data URL
       canvas

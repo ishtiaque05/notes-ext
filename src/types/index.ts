@@ -35,7 +35,14 @@ export type Message =
   | { type: 'CAPTURE_IMAGE'; data: { src: string; alt: string; dataUrl: string } }
   | { type: 'CAPTURE_TEXT'; data: { text: string; sourceUrl: string } }
   | { type: 'FETCH_IMAGE'; data: { url: string } }
-  | { type: 'CAPTURE_SCREENSHOT'; data: { rect: { x: number; y: number; width: number; height: number }; alt: string; originalSrc: string } }
+  | {
+      type: 'CAPTURE_SCREENSHOT';
+      data: {
+        rect: { x: number; y: number; width: number; height: number };
+        alt: string;
+        originalSrc: string;
+      };
+    }
   | { type: 'GET_ITEMS' }
   | { type: 'DELETE_ITEM'; data: { id: string } }
   | { type: 'REORDER_ITEMS'; data: { items: CapturedItem[] } }
