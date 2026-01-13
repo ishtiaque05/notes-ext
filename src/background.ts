@@ -8,6 +8,8 @@ import type {
   ImageMetadata,
   TextMetadata,
 } from './types';
+import { NotesCollectorError } from './types/errors';
+import { checkStorageAvailable, safeStorageSet, getStorageWarning } from './utils/storage';
 
 const STORAGE_KEY = 'notesCollectorData';
 
@@ -156,6 +158,9 @@ async function handleCaptureLink(data: {
   text: string;
 }): Promise<MessageResponse<CapturedItem>> {
   try {
+    // Check storage availability before adding
+    await checkStorageAvailable(500); // Estimate 500 bytes for link
+
     const storageData = await getStorageData();
 
     const newItem: CapturedItem = {
@@ -173,15 +178,26 @@ async function handleCaptureLink(data: {
     storageData.items.push(newItem);
     storageData.nextOrder++;
 
-    await browser.storage.local.set({ [STORAGE_KEY]: storageData });
+    await safeStorageSet({ [STORAGE_KEY]: storageData });
 
     // Notify sidebar of new item
     notifySidebar({ type: 'ITEM_ADDED', data: newItem });
 
+    // Check if approaching limits and send warning
+    const warning = await getStorageWarning();
+    if (warning) {
+      notifySidebar({ type: 'STORAGE_WARNING', data: { message: warning } });
+    }
+
     return { success: true, data: newItem };
   } catch (error) {
     console.error('Error capturing link:', error);
-    return { success: false, error: String(error) };
+
+    if (error instanceof NotesCollectorError) {
+      return { success: false, error: error.userMessage || error.message };
+    }
+
+    return { success: false, error: 'Failed to capture link. Please try again.' };
   }
 }
 
@@ -192,10 +208,14 @@ async function handleCaptureImage(data: {
   dataUrl: string;
 }): Promise<MessageResponse<CapturedItem>> {
   try {
-    const storageData = await getStorageData();
-
     // Use data URL if available, otherwise use original src
     const content = data.dataUrl || data.src;
+
+    // Estimate size (data URLs can be large)
+    const estimatedSize = content.startsWith('data:') ? content.length : 500;
+    await checkStorageAvailable(estimatedSize);
+
+    const storageData = await getStorageData();
 
     const newItem: CapturedItem = {
       id: crypto.randomUUID(),
@@ -212,15 +232,26 @@ async function handleCaptureImage(data: {
     storageData.items.push(newItem);
     storageData.nextOrder++;
 
-    await browser.storage.local.set({ [STORAGE_KEY]: storageData });
+    await safeStorageSet({ [STORAGE_KEY]: storageData });
 
     // Notify sidebar of new item
     notifySidebar({ type: 'ITEM_ADDED', data: newItem });
 
+    // Check if approaching limits and send warning
+    const warning = await getStorageWarning();
+    if (warning) {
+      notifySidebar({ type: 'STORAGE_WARNING', data: { message: warning } });
+    }
+
     return { success: true, data: newItem };
   } catch (error) {
     console.error('Error capturing image:', error);
-    return { success: false, error: String(error) };
+
+    if (error instanceof NotesCollectorError) {
+      return { success: false, error: error.userMessage || error.message };
+    }
+
+    return { success: false, error: 'Failed to capture image. Please try again.' };
   }
 }
 
@@ -230,6 +261,10 @@ async function handleCaptureText(data: {
   sourceUrl: string;
 }): Promise<MessageResponse<CapturedItem>> {
   try {
+    // Estimate size based on text length
+    const estimatedSize = data.text.length + 200;
+    await checkStorageAvailable(estimatedSize);
+
     const storageData = await getStorageData();
 
     const newItem: CapturedItem = {
@@ -247,15 +282,26 @@ async function handleCaptureText(data: {
     storageData.items.push(newItem);
     storageData.nextOrder++;
 
-    await browser.storage.local.set({ [STORAGE_KEY]: storageData });
+    await safeStorageSet({ [STORAGE_KEY]: storageData });
 
     // Notify sidebar of new item
     notifySidebar({ type: 'ITEM_ADDED', data: newItem });
 
+    // Check if approaching limits and send warning
+    const warning = await getStorageWarning();
+    if (warning) {
+      notifySidebar({ type: 'STORAGE_WARNING', data: { message: warning } });
+    }
+
     return { success: true, data: newItem };
   } catch (error) {
     console.error('Error capturing text:', error);
-    return { success: false, error: String(error) };
+
+    if (error instanceof NotesCollectorError) {
+      return { success: false, error: error.userMessage || error.message };
+    }
+
+    return { success: false, error: 'Failed to capture text. Please try again.' };
   }
 }
 

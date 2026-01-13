@@ -272,3 +272,115 @@ footer {
     }
   }
 }
+
+// Notifications
+.notification {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  padding: 12px 20px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  z-index: 10000;
+  box-shadow:
+    0 4px 12px rgb(0, 0, 0, 0.15),
+    0 0 0 1px rgb(0, 0, 0, 0.05);
+  animation: slideIn 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+  max-width: 400px;
+  word-wrap: break-word;
+
+  &.notification-success {
+    background-color: #28a745;
+    color: white;
+  }
+
+  &.notification-error {
+    background-color: #dc3545;
+    color: white;
+  }
+
+  &.notification-warning {
+    background-color: #ffc107;
+    color: #000;
+    border: 1px solid #ffb300;
+  }
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(400px);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slideOut {
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+
+  to {
+    transform: translateX(400px);
+    opacity: 0;
+  }
+}
+
+// Loading spinner
+.loading-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgb(255, 255, 255, 0.9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid #f3f3f3;
+  border-top: 3px solid $primary-color;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+// Loading button state
+.btn-loading {
+  position: relative;
+  pointer-events: none;
+
+  &::after {
+    content: '';
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    top: 50%;
+    left: 50%;
+    margin-left: -8px;
+    margin-top: -8px;
+    border: 2px solid transparent;
+    border-top-color: currentColor;
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+  }
+}
