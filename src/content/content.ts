@@ -106,14 +106,45 @@ function handleClick(event: MouseEvent) {
     return;
   }
 
-  // Handle image clicks
-  if (target.tagName === 'IMG') {
-    const img = target as HTMLImageElement;
-    if (img.src) {
-      event.preventDefault(); // Prevent default behavior
-      void captureImage(img);
+  // Handle image clicks with Ctrl+Shift+Click
+  // This works even when zoom overlays are present
+  if ((event.ctrlKey || event.metaKey) && event.shiftKey) {
+    // Check if we clicked on an image directly
+    if (target.tagName === 'IMG') {
+      const img = target as HTMLImageElement;
+      if (img.src) {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+        void captureImage(img);
+        return;
+      }
     }
-    return;
+
+    // Check if we clicked on a zoom overlay or container that has an image child
+    // This handles cases where zoom buttons/overlays cover the image
+    const imgInside = target.querySelector('img');
+    if (imgInside?.src) {
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+      void captureImage(imgInside);
+      return;
+    }
+
+    // Check if the clicked element is inside a container with an image sibling
+    // This handles cases where the zoom button is a sibling of the image
+    const parent = target.parentElement;
+    if (parent) {
+      const imgSibling = parent.querySelector('img');
+      if (imgSibling?.src) {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+        void captureImage(imgSibling);
+        return;
+      }
+    }
   }
 
   // Handle text element clicks with Ctrl+Click (for non-link, non-image elements)
