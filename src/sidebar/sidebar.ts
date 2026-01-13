@@ -288,6 +288,14 @@ function handleBackgroundMessage(message: { type: string; data?: unknown }) {
     console.warn('=== UPDATING ENABLED STATE TO:', data.enabled);
     isExtensionEnabled = data.enabled;
     updateToggleButton();
+  } else if (
+    message.type === 'STORAGE_WARNING' &&
+    message.data &&
+    typeof message.data === 'object' &&
+    'message' in message.data
+  ) {
+    const data = message.data as { message: string };
+    showNotification(data.message, 'warning');
   }
 }
 
@@ -709,34 +717,23 @@ async function updateItemsOrder() {
 }
 
 // Show notification message
-function showNotification(message: string, type: 'success' | 'error') {
+function showNotification(message: string, type: 'success' | 'error' | 'warning') {
   // Create notification element
   const notification = document.createElement('div');
   notification.className = `notification notification-${type}`;
   notification.textContent = message;
-  notification.style.cssText = `
-    position: fixed;
-    top: 20px;
-    right: 20px;
-    padding: 12px 20px;
-    border-radius: 4px;
-    color: white;
-    font-size: 14px;
-    font-weight: 500;
-    z-index: 10000;
-    animation: slideIn 0.3s ease-out;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-    ${type === 'success' ? 'background-color: #28a745;' : 'background-color: #dc3545;'}
-  `;
 
   // Add to DOM
   document.body.appendChild(notification);
 
-  // Remove after 3 seconds
+  // Remove after duration (5s for warnings, 3s for others)
+  const duration = type === 'warning' ? 5000 : 3000;
   setTimeout(() => {
     notification.style.animation = 'slideOut 0.3s ease-in';
     setTimeout(() => {
-      document.body.removeChild(notification);
+      if (document.body.contains(notification)) {
+        document.body.removeChild(notification);
+      }
     }, 300);
-  }, 3000);
+  }, duration);
 }

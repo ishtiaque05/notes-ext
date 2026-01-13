@@ -163,13 +163,26 @@ async function captureImage(img: HTMLImageElement) {
   } catch (error) {
     console.error('Failed to capture image:', error);
 
+    // Determine error reason
+    let errorMessage = 'Image captured (URL only - could not embed)';
+    const errorStr = error instanceof Error ? error.message : String(error);
+
+    if (errorStr.includes('tainted') || errorStr.includes('CORS') || errorStr.includes('cross-origin')) {
+      errorMessage = 'Image captured (URL only - CORS restricted)';
+    } else if (errorStr.includes('load')) {
+      errorMessage = 'Image captured (URL only - failed to load)';
+    }
+
     // Try fallback: send without data URL (will store original URL only)
     try {
       await browser.runtime.sendMessage({
         type: 'CAPTURE_IMAGE',
         data: { src, alt, dataUrl: '' },
       });
+
+      // Show visual feedback with warning
       showCaptureConfirmation(img);
+      console.warn(errorMessage);
     } catch (fallbackError) {
       console.error('Fallback capture also failed:', fallbackError);
     }
