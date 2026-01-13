@@ -325,7 +325,7 @@ async function handleClearAll() {
 }
 
 // Handle save as PDF
-async function handleSavePdf() {
+function handleSavePdf() {
   if (typeof pdfMake === 'undefined') {
     alert('PDF library not loaded. Please refresh the sidebar.');
     return;
@@ -337,10 +337,6 @@ async function handleSavePdf() {
   }
 
   try {
-    // Disable button to prevent multiple clicks
-    savePdfBtn.disabled = true;
-    savePdfBtn.textContent = 'Generating PDF...';
-
     // Build PDF document
     const docDefinition = buildPdfDocument();
 
@@ -348,44 +344,17 @@ async function handleSavePdf() {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
     const filename = `notes-${timestamp}.pdf`;
 
-    // Create PDF as blob
-    const pdfDocGenerator = pdfMake.createPdf(docDefinition);
+    // Create and download PDF using pdfMake's built-in download
+    // Note: This downloads directly to browser's Downloads folder without file picker
+    pdfMake.createPdf(docDefinition).download(filename);
 
-    pdfDocGenerator.getBlob((blob: Blob) => {
-      void (async () => {
-        try {
-          // Create object URL from blob
-          const url = URL.createObjectURL(blob);
-
-          // Use browser.downloads API to save with file picker
-          await browser.downloads.download({
-            url: url,
-            filename: filename,
-            saveAs: true, // Show file picker dialog
-          });
-
-          // Show success message
-          showNotification('PDF exported successfully!', 'success');
-
-          // Clean up object URL after a delay
-          setTimeout(() => {
-            URL.revokeObjectURL(url);
-          }, 1000);
-        } catch (error) {
-          console.error('Failed to save PDF:', error);
-          showNotification('Failed to save PDF. Please try again.', 'error');
-        } finally {
-          // Re-enable button
-          savePdfBtn.disabled = false;
-          savePdfBtn.textContent = 'Save as PDF';
-        }
-      })();
-    });
+    // Show success notification
+    setTimeout(() => {
+      showNotification('PDF downloaded to your Downloads folder!', 'success');
+    }, 500);
   } catch (error) {
     console.error('Failed to generate PDF:', error);
     showNotification('Failed to generate PDF. Please try again.', 'error');
-    savePdfBtn.disabled = false;
-    savePdfBtn.textContent = 'Save as PDF';
   }
 }
 
@@ -439,30 +408,45 @@ function buildPdfDocument() {
         });
       }
     } else if (item.type === 'image' && 'alt' in item.metadata) {
-      // Add image
-      try {
-        content.push({
-          image: item.content, // data URL
-          width: 400,
-          margin: [10, 0, 0, 5],
-        });
-
-        // Add alt text and source URL
-        if (item.metadata.alt) {
+      // Add image - check if data URL is valid
+      if (item.content && item.content.startsWith('data:image/')) {
+        try {
           content.push({
-            text: item.metadata.alt,
-            style: 'imageCaption',
-            margin: [10, 5, 0, 2],
+            image: item.content, // data URL
+            width: 400,
+            margin: [10, 0, 0, 5],
+          });
+
+          // Add alt text and source URL
+          if (item.metadata.alt) {
+            content.push({
+              text: item.metadata.alt,
+              style: 'imageCaption',
+              margin: [10, 5, 0, 2],
+            });
+          }
+
+          content.push({
+            text: item.metadata.originalSrc,
+            style: 'url',
+            margin: [10, 0, 0, 0],
+          });
+        } catch (error) {
+          console.error('Error adding image to PDF:', error);
+          // Fallback if image fails to embed
+          content.push({
+            text: `[Image: ${item.metadata.alt || 'No description'}]`,
+            style: 'error',
+            margin: [10, 0, 0, 2],
+          });
+          content.push({
+            text: item.metadata.originalSrc,
+            style: 'url',
+            margin: [10, 0, 0, 0],
           });
         }
-
-        content.push({
-          text: item.metadata.originalSrc,
-          style: 'url',
-          margin: [10, 0, 0, 0],
-        });
-      } catch (error) {
-        // Fallback if image fails to embed
+      } else {
+        // Image data not available, show placeholder
         content.push({
           text: `[Image: ${item.metadata.alt || 'No description'}]`,
           style: 'error',
@@ -536,9 +520,6 @@ function buildPdfDocument() {
         color: '#cc0000',
         italics: true,
       },
-    },
-    defaultStyle: {
-      font: 'Roboto',
     },
     pageMargins: [40, 60, 40, 60],
   };
