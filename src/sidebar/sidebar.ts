@@ -355,16 +355,34 @@ function handleSavePdf() {
   }
 
   try {
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('=== GENERATING PDF ===');
+      console.warn('Total items:', capturedItems.length);
+    }
+
     // Build PDF document
     const docDefinition = buildPdfDocument();
+
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('Document definition built successfully');
+      console.warn('Content items:', docDefinition.content.length);
+    }
 
     // Generate filename with timestamp
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
     const filename = `notes-${timestamp}.pdf`;
 
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('Creating PDF with filename:', filename);
+    }
+
     // Create and download PDF using pdfMake's built-in download
     // Note: This downloads directly to browser's Downloads folder without file picker
     pdfMake.createPdf(docDefinition).download(filename);
+
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('PDF download initiated');
+    }
 
     // Show success notification
     setTimeout(() => {
@@ -372,6 +390,9 @@ function handleSavePdf() {
     }, 500);
   } catch (error) {
     console.error('Failed to generate PDF:', error);
+    if (process.env.NODE_ENV === 'development') {
+      console.error('Error details:', error);
+    }
     showNotification('Failed to generate PDF. Please try again.', 'error');
   }
 }

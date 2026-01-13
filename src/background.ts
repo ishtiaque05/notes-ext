@@ -122,6 +122,10 @@ browser.runtime.onMessage.addListener((message: Message): Promise<MessageRespons
   }
 
   switch (message.type) {
+    case 'FETCH_IMAGE':
+      return handleFetchImage(message.data.url);
+    case 'CAPTURE_SCREENSHOT':
+      return handleCaptureScreenshot(message.data);
     case 'CAPTURE_LINK':
       return handleCaptureLink(message.data);
     case 'CAPTURE_IMAGE':
@@ -151,6 +155,178 @@ browser.runtime.onMessage.addListener((message: Message): Promise<MessageRespons
       return Promise.resolve({ success: false, error: 'Unknown message type' });
   }
 });
+
+// Handler for fetching images (bypasses CSP restrictions)
+async function handleFetchImage(url: string): Promise<MessageResponse<{ dataUrl: string }>> {
+  try {
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('Background: Fetching image from', url);
+    }
+
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const blob = await response.blob();
+
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('Background: Image fetched, size:', blob.size, 'type:', blob.type);
+    }
+
+    // Convert blob to data URL
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        if (typeof reader.result === 'string') {
+          resolve(reader.result);
+        } else {
+          reject(new Error('Failed to read blob as data URL'));
+        }
+      };
+      reader.onerror = () => reject(new Error('FileReader error'));
+      reader.readAsDataURL(blob);
+    });
+
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('Background: Conversion successful, data URL length:', dataUrl.length);
+    }
+
+    return { success: true, data: { dataUrl } };
+  } catch (error) {
+    console.error('Background: Error fetching image:', error);
+    return { success: false, error: String(error) };
+  }
+}
+
+// Handler for capturing screenshots of images
+async function handleCaptureScreenshot(data: {
+  rect: { x: number; y: number; width: number; height: number };
+  alt: string;
+  originalSrc: string;
+}): Promise<MessageResponse<CapturedItem>> {
+  try {
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('Background: Capturing screenshot at', data.rect);
+    }
+
+    // Get the current active tab
+    const tabs = await browser.tabs.query({ active: true, currentWindow: true });
+    const activeTab = tabs[0];
+
+    if (!activeTab?.id || activeTab.windowId === undefined) {
+      throw new Error('No active tab found');
+    }
+
+    // Capture visible tab as data URL
+    const screenshotDataUrl = await browser.tabs.captureVisibleTab(activeTab.windowId, {
+      format: 'png',
+    });
+
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('Background: Screenshot captured, data URL length:', screenshotDataUrl.length);
+    }
+
+    // Create an image to crop the screenshot
+    const croppedDataUrl = await cropImage(screenshotDataUrl, data.rect);
+
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('Background: Image cropped, data URL length:', croppedDataUrl.length);
+    }
+
+    // Check storage availability
+    await checkStorageAvailable(croppedDataUrl.length);
+
+    const storageData = await getStorageData();
+
+    const newItem: CapturedItem = {
+      id: crypto.randomUUID(),
+      type: 'image',
+      order: storageData.nextOrder,
+      timestamp: Date.now(),
+      content: croppedDataUrl,
+      metadata: {
+        alt: data.alt,
+        originalSrc: data.originalSrc,
+      } as ImageMetadata,
+    };
+
+    storageData.items.push(newItem);
+    storageData.nextOrder++;
+
+    await safeStorageSet({ [STORAGE_KEY]: storageData });
+
+    // Notify sidebar of new item
+    notifySidebar({ type: 'ITEM_ADDED', data: newItem });
+
+    // Check if approaching limits and send warning
+    const warning = await getStorageWarning();
+    if (warning) {
+      notifySidebar({ type: 'STORAGE_WARNING', data: { message: warning } });
+    }
+
+    return { success: true, data: newItem };
+  } catch (error) {
+    console.error('Error capturing screenshot:', error);
+
+    if (error instanceof NotesCollectorError) {
+      return { success: false, error: error.userMessage || error.message };
+    }
+
+    return { success: false, error: 'Failed to capture screenshot. Please try again.' };
+  }
+}
+
+// Helper function to crop an image
+async function cropImage(
+  dataUrl: string,
+  rect: { x: number; y: number; width: number; height: number }
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = new OffscreenCanvas(rect.width, rect.height);
+      const ctx = canvas.getContext('2d');
+
+      if (!ctx) {
+        reject(new Error('Could not get canvas context'));
+        return;
+      }
+
+      // Draw the cropped portion
+      ctx.drawImage(
+        img,
+        rect.x,
+        rect.y,
+        rect.width,
+        rect.height,
+        0,
+        0,
+        rect.width,
+        rect.height
+      );
+
+      // Convert to blob and then to data URL
+      canvas
+        .convertToBlob({ type: 'image/png' })
+        .then((blob) => {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            if (typeof reader.result === 'string') {
+              resolve(reader.result);
+            } else {
+              reject(new Error('Failed to convert blob to data URL'));
+            }
+          };
+          reader.onerror = () => reject(new Error('FileReader error'));
+          reader.readAsDataURL(blob);
+        })
+        .catch(reject);
+    };
+    img.onerror = () => reject(new Error('Failed to load screenshot image'));
+    img.src = dataUrl;
+  });
+}
 
 // Handler for capturing links
 async function handleCaptureLink(data: {
