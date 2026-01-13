@@ -3,8 +3,18 @@ import './sidebar.scss';
 import type { CapturedItem } from '../types';
 
 // pdfMake is loaded via script tag in sidebar.html
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-declare const pdfMake: any;
+// Type definitions for pdfMake global
+interface PdfDocument {
+  download: (filename: string) => void;
+  open: () => void;
+  print: () => void;
+}
+
+interface PdfMake {
+  createPdf: (documentDefinition: Record<string, unknown>) => PdfDocument;
+}
+
+declare const pdfMake: PdfMake;
 
 let capturedItems: CapturedItem[] = [];
 let isExtensionEnabled = true;
@@ -360,7 +370,7 @@ function handleSavePdf() {
 
 // Build PDF document definition from captured items
 function buildPdfDocument() {
-  const content: any[] = [];
+  const content: Record<string, unknown>[] = [];
 
   // Add header with timestamp
   const now = new Date();
