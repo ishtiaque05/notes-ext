@@ -20,18 +20,35 @@ declare const pdfMake: PdfMake;
 export async function generatePdf(items: CapturedItem[]) {
     if (items.length === 0) return;
 
-    const docDefinition = createDocDefinition(items);
+    // Determine the title: use the most recent item's source URL if available, or a default
+    let title = 'Captured Notes';
+    const sortedItems = [...items].sort((a, b) => b.timestamp - a.timestamp);
+
+    for (const item of sortedItems) {
+        const sourceUrl = (item.metadata as any).sourceUrl || (item.metadata as any).href || (item.metadata as any).originalSrc;
+        if (sourceUrl) {
+            try {
+                title = new URL(sourceUrl).hostname;
+                break;
+            } catch {
+                title = sourceUrl;
+                break;
+            }
+        }
+    }
+
+    const docDefinition = createDocDefinition(items, title);
     pdfMake.createPdf(docDefinition).download('captured-notes.pdf');
 }
 
 /**
  * Creates the document definition for pdfMake
  */
-function createDocDefinition(items: CapturedItem[]): any {
+function createDocDefinition(items: CapturedItem[], title: string): any {
     const content: any[] = [];
 
     // Title
-    content.push({ text: 'Captured Notes', style: 'title' });
+    content.push({ text: title, style: 'title' });
     content.push({
         text: `Generated on ${new Date().toLocaleString()}`,
         style: 'subtitle',
@@ -42,19 +59,15 @@ function createDocDefinition(items: CapturedItem[]): any {
     const sortedItems = [...items].sort((a, b) => a.order - b.order);
 
     // Add each item
-    sortedItems.forEach((item, index) => {
-        content.push({
-            text: `${index + 1}. ${item.type.toUpperCase()}`,
-            style: 'itemHeader',
-            margin: [0, 10, 0, 5],
-        });
+    sortedItems.forEach((item) => {
+        // No labels or numbering as per user request
 
         if (item.type === 'link' && 'href' in item.metadata) {
             content.push({
                 text: item.metadata.text || item.metadata.href,
                 link: item.metadata.href,
                 style: 'link',
-                margin: [10, 0, 0, 2],
+                margin: [10, 15, 0, 2],
             });
             if (item.metadata.text && item.metadata.text !== item.metadata.href) {
                 content.push({ text: item.metadata.href, style: 'url', margin: [10, 0, 0, 0] });
@@ -62,7 +75,7 @@ function createDocDefinition(items: CapturedItem[]): any {
         } else if (item.type === 'image' && 'alt' in item.metadata && 'originalSrc' in item.metadata) {
             if (item.content?.startsWith('data:image/')) {
                 try {
-                    content.push({ image: item.content, width: 400, margin: [10, 0, 0, 5] });
+                    content.push({ image: item.content, width: 400, margin: [10, 15, 0, 5] });
                     if (item.metadata.alt) {
                         content.push({ text: item.metadata.alt, style: 'imageCaption', margin: [10, 5, 0, 2] });
                     }
@@ -72,12 +85,12 @@ function createDocDefinition(items: CapturedItem[]): any {
                 }
             }
         } else if (item.type === 'text' && 'text' in item.metadata && 'sourceUrl' in item.metadata) {
-            content.push({ text: item.metadata.text, style: 'capturedText', margin: [10, 0, 0, 5] });
+            content.push({ text: item.metadata.text, style: 'capturedText', margin: [10, 15, 0, 5] });
             content.push({ text: `Source: ${item.metadata.sourceUrl}`, style: 'url', margin: [10, 0, 0, 0] });
         } else if (item.type === 'screenshot' && 'dimensions' in item.metadata) {
             if (item.content?.startsWith('data:image/')) {
                 try {
-                    content.push({ image: item.content, width: 400, margin: [10, 0, 0, 5] });
+                    content.push({ image: item.content, width: 400, margin: [10, 15, 0, 5] });
                     if (item.metadata.alt) {
                         content.push({ text: item.metadata.alt, style: 'imageCaption', margin: [10, 5, 0, 2] });
                     }
