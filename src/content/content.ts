@@ -32,7 +32,10 @@ function init() {
 
 async function checkSiteEnabled() {
   try {
-    const response = (await browser.runtime.sendMessage({ type: 'CHECK_SITE_ENABLED', data: {} })) as {
+    const response = (await browser.runtime.sendMessage({
+      type: 'CHECK_SITE_ENABLED',
+      data: {},
+    })) as {
       success: boolean;
       data?: { enabled: boolean };
     };
@@ -148,8 +151,8 @@ async function captureImage(img: HTMLImageElement) {
           dataUrl: response.data.dataUrl,
         },
       });
-      // Also send screenshot info if we want to store dimensions, 
-      // but original code used CAPTURE_IMAGE or CAPTURE_SCREENSHOT interchangeably? 
+      // Also send screenshot info if we want to store dimensions,
+      // but original code used CAPTURE_IMAGE or CAPTURE_SCREENSHOT interchangeably?
       // Let's check original background.ts.
       showCaptureConfirmation(img);
     }
@@ -170,7 +173,12 @@ async function captureText(text: string) {
   }
 }
 
-async function captureScreenshotArea(rect: { x: number; y: number; width: number; height: number }) {
+async function captureScreenshotArea(rect: {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}) {
   try {
     const response = await browser.runtime.sendMessage({
       type: 'REQUEST_SCREENSHOT',

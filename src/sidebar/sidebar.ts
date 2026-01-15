@@ -26,11 +26,16 @@ class SidebarController {
 
   private init() {
     if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', () => { void this.onReady(); });
+      document.addEventListener('DOMContentLoaded', () => {
+        void this.onReady();
+      });
     } else {
       void this.onReady();
     }
-    browser.runtime.onMessage.addListener((m: any) => { this.handleBackgroundMessage(m as Message); return true; });
+    browser.runtime.onMessage.addListener((m: any) => {
+      this.handleBackgroundMessage(m as Message);
+      return true;
+    });
   }
 
   private async onReady() {
@@ -52,9 +57,15 @@ class SidebarController {
     await this.checkEnabledState();
 
     // Event listeners
-    this.savePdfBtn.addEventListener('click', () => { void generatePdf(this.capturedItems); });
-    this.clearAllBtn.addEventListener('click', () => { void this.handleClearAll(); });
-    this.toggleEnabledBtn.addEventListener('click', () => { void this.handleToggleEnabled(); });
+    this.savePdfBtn.addEventListener('click', () => {
+      void generatePdf(this.capturedItems);
+    });
+    this.clearAllBtn.addEventListener('click', () => {
+      void this.handleClearAll();
+    });
+    this.toggleEnabledBtn.addEventListener('click', () => {
+      void this.handleToggleEnabled();
+    });
   }
 
   private async loadItems() {
@@ -93,7 +104,8 @@ class SidebarController {
     this.itemsContainer.innerHTML = '';
 
     if (this.capturedItems.length === 0) {
-      this.itemsContainer.innerHTML = '<div class="empty-state">No items captured yet. Click on links, images or select text while holding Ctrl+Shift!</div>';
+      this.itemsContainer.innerHTML =
+        '<div class="empty-state">No items captured yet. Click on links, images or select text while holding Ctrl+Shift!</div>';
       return;
     }
 
@@ -189,7 +201,9 @@ class SidebarController {
     }
   }
 
-  private handleBackgroundMessage(message: Message | { type: string; data?: any; enabled?: boolean }) {
+  private handleBackgroundMessage(
+    message: Message | { type: string; data?: any; enabled?: boolean }
+  ) {
     switch (message.type) {
       case 'ITEM_ADDED':
         this.capturedItems.push(message.data);
@@ -197,7 +211,9 @@ class SidebarController {
         this.updateUI();
         break;
       case 'ITEM_DELETED':
-        this.capturedItems = this.capturedItems.filter((i) => (i as any).id !== (message.data as any).id);
+        this.capturedItems = this.capturedItems.filter(
+          (i) => (i as any).id !== (message.data as any).id
+        );
         this.renderItems();
         this.updateUI();
         break;
