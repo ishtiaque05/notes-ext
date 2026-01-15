@@ -371,16 +371,34 @@ function handleSavePdf() {
   }
 
   try {
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('=== GENERATING PDF ===');
+      console.warn('Total items:', capturedItems.length);
+    }
+
     // Build PDF document
     const docDefinition = buildPdfDocument();
+
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('Document definition built successfully');
+      console.warn('Content items:', docDefinition.content.length);
+    }
 
     // Generate filename with timestamp
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
     const filename = `notes-${timestamp}.pdf`;
 
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('Creating PDF with filename:', filename);
+    }
+
     // Create and download PDF using pdfMake's built-in download
     // Note: This downloads directly to browser's Downloads folder without file picker
     pdfMake.createPdf(docDefinition).download(filename);
+
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('PDF download initiated');
+    }
 
     // Show success notification
     setTimeout(() => {
@@ -388,6 +406,9 @@ function handleSavePdf() {
     }, 500);
   } catch (error) {
     console.error('Failed to generate PDF:', error);
+    if (process.env.NODE_ENV === 'development') {
+      console.error('Error details:', error);
+    }
     showNotification('Failed to generate PDF. Please try again.', 'error');
   }
 }
@@ -796,7 +817,7 @@ function showNotification(message: string, type: 'success' | 'error' | 'warning'
   // Remove after duration (5s for warnings, 3s for others)
   const duration = type === 'warning' ? 5000 : 3000;
   setTimeout(() => {
-    notification.style.animation = 'slideOut 0.3s ease-in';
+    notification.style.animation = 'slide-out 0.3s ease-in';
     setTimeout(() => {
       if (document.body.contains(notification)) {
         document.body.removeChild(notification);

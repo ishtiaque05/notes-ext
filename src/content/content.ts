@@ -17,8 +17,20 @@ function addHoverListeners() {
 
 // Listen for enable/disable messages from background
 browser.runtime.onMessage.addListener((message: { type: string; enabled?: boolean }) => {
+  if (process.env.NODE_ENV === 'development') {
+    console.warn('=== CONTENT: Received message ===');
+    console.warn('Message type:', message.type);
+    console.warn('Message enabled:', message.enabled);
+  }
+
   if (message.type === 'SITE_ENABLED_CHANGED') {
     isEnabled = message.enabled ?? true;
+
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('=== CONTENT: Extension state changed ===');
+      console.warn('New isEnabled state:', isEnabled);
+    }
+
     updateDisabledState();
   }
 });
@@ -80,6 +92,126 @@ function isCapturableElement(element: HTMLElement): boolean {
   return false;
 }
 
+/**
+ * Finds the best image element to capture from a starting element.
+ * Handles cases where there are multiple nested images (placeholder + actual image).
+ * Returns the image most likely to contain actual content (not placeholders or SVGs).
+ */
+function findBestImage(startElement: HTMLElement | null): HTMLImageElement | null {
+  if (!startElement) {
+    return null;
+  }
+
+  // Collect all possible images to consider
+  const allCandidates: HTMLImageElement[] = [];
+
+  // If starting element is an image, add it
+  if (startElement.tagName === 'IMG') {
+    allCandidates.push(startElement as HTMLImageElement);
+  }
+
+  // Look in parent for sibling images (common pattern: placeholder + real image as siblings)
+  if (startElement.parentElement) {
+    const siblingImages = Array.from(startElement.parentElement.querySelectorAll('img'));
+    allCandidates.push(...siblingImages);
+  }
+
+  // Look in children for nested images
+  const childImages = Array.from(startElement.querySelectorAll('img'));
+  allCandidates.push(...childImages);
+
+  // Remove duplicates
+  const uniqueImages = Array.from(new Set(allCandidates));
+
+  if (process.env.NODE_ENV === 'development') {
+    console.warn(`=== FINDING BEST IMAGE (found ${uniqueImages.length} candidates) ===`);
+  }
+
+  // Score each image and pick the best one
+  let bestImage: HTMLImageElement | null = null;
+  let bestScore = -1;
+
+  for (const img of uniqueImages) {
+    if (!img.src) continue;
+
+    let score = 0;
+    const scoreDetails: string[] = [];
+
+    // Strongly prefer non-placeholder images
+    if (!isPlaceholderImage(img)) {
+      score += 100;
+      scoreDetails.push('not-placeholder:+100');
+    }
+
+    // Prefer images with actual content (non-SVG data URLs or HTTP URLs)
+    if (!img.src.startsWith('data:image/svg+xml')) {
+      score += 50;
+      scoreDetails.push('non-svg:+50');
+    }
+
+    // Prefer images with dimensions
+    if (img.naturalWidth > 0 && img.naturalHeight > 0) {
+      score += 30;
+      scoreDetails.push(`natural-dims(${img.naturalWidth}x${img.naturalHeight}):+30`);
+    } else if (img.offsetWidth > 0 && img.offsetHeight > 0) {
+      score += 20;
+      scoreDetails.push(`offset-dims(${img.offsetWidth}x${img.offsetHeight}):+20`);
+    }
+
+    // Prefer images with alt text or title
+    if (img.alt || img.getAttribute('title')) {
+      score += 10;
+      scoreDetails.push('has-alt:+10');
+    }
+
+    // Prefer visible images (not aria-hidden)
+    if (img.getAttribute('aria-hidden') !== 'true') {
+      score += 5;
+      scoreDetails.push('visible:+5');
+    }
+
+    if (process.env.NODE_ENV === 'development') {
+      const srcPreview = img.src.substring(0, 60) + (img.src.length > 60 ? '...' : '');
+      console.warn(`  Candidate: score=${score} src="${srcPreview}"`);
+      console.warn(`    Details: ${scoreDetails.join(', ')}`);
+    }
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestImage = img;
+    }
+  }
+
+  if (process.env.NODE_ENV === 'development') {
+    console.warn(`  Best image score: ${bestScore}`);
+  }
+
+  return bestImage;
+}
+
+/**
+ * Checks if an image is likely a placeholder (SVG, aria-hidden, or has placeholder-like src)
+ */
+function isPlaceholderImage(img: HTMLImageElement): boolean {
+  // Check if aria-hidden (common for placeholder images)
+  if (img.getAttribute('aria-hidden') === 'true') {
+    return true;
+  }
+
+  // Check if src is a data URL with SVG (common placeholder pattern)
+  if (img.src.startsWith('data:image/svg+xml')) {
+    return true;
+  }
+
+  // Check if image has zero natural dimensions (placeholder pattern)
+  // Note: We need to be careful here as some real images might not be loaded yet
+  if (img.complete && img.naturalWidth === 0 && img.naturalHeight === 0) {
+    return true;
+  }
+
+  return false;
+}
+
 function getTextContent(element: HTMLElement): string | null {
   // Get the direct text content of the element, excluding child elements
   let text = element.textContent?.trim() || '';
@@ -98,7 +230,19 @@ function getTextContent(element: HTMLElement): string | null {
 }
 
 function handleClick(event: MouseEvent) {
-  if (!isEnabled) return;
+  if (process.env.NODE_ENV === 'development') {
+    console.warn('=== CONTENT: Click detected ===');
+    console.warn('isEnabled:', isEnabled);
+    console.warn('Ctrl/Meta:', event.ctrlKey || event.metaKey);
+    console.warn('Shift:', event.shiftKey);
+  }
+
+  if (!isEnabled) {
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('=== CONTENT: Extension is disabled, ignoring click ===');
+    }
+    return;
+  }
 
   const target = event.target as HTMLElement;
 
@@ -125,14 +269,45 @@ function handleClick(event: MouseEvent) {
     return;
   }
 
-  // Handle image clicks
-  if (target.tagName === 'IMG') {
-    const img = target as HTMLImageElement;
-    if (img.src) {
-      event.preventDefault(); // Prevent default behavior
-      void captureImage(img);
+  // Handle image clicks with Ctrl+Shift+Click
+  // This works even when zoom overlays are present
+  if ((event.ctrlKey || event.metaKey) && event.shiftKey) {
+    // Check if we clicked on an image directly
+    if (target.tagName === 'IMG') {
+      const img = findBestImage(target as HTMLImageElement);
+      if (img?.src) {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+        void captureImage(img);
+        return;
+      }
     }
-    return;
+
+    // Check if we clicked on a zoom overlay or container that has an image child
+    // This handles cases where zoom buttons/overlays cover the image
+    const imgInside = findBestImage(target.querySelector('img'));
+    if (imgInside?.src) {
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+      void captureImage(imgInside);
+      return;
+    }
+
+    // Check if the clicked element is inside a container with an image sibling
+    // This handles cases where the zoom button is a sibling of the image
+    const parent = target.parentElement;
+    if (parent) {
+      const imgSibling = findBestImage(parent.querySelector('img'));
+      if (imgSibling?.src) {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+        void captureImage(imgSibling);
+        return;
+      }
+    }
   }
 
   // Handle text element clicks with Ctrl+Click (for non-link, non-image elements)
@@ -167,44 +342,45 @@ async function captureImage(img: HTMLImageElement) {
   const src = img.src;
   const alt = img.alt || img.getAttribute('title') || 'Image';
 
-  try {
-    // Convert image to data URL
-    const dataUrl = await imageToDataURL(img);
+  // Debug logging
+  if (process.env.NODE_ENV === 'development') {
+    console.warn('=== CAPTURING IMAGE VIA SCREENSHOT ===');
+    console.warn('Image src:', src);
+    console.warn('Image alt:', alt);
+  }
 
-    // Send message to background script to store the image
+  try {
+    // Get the bounding rectangle of the image relative to the viewport
+    const rect = img.getBoundingClientRect();
+
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('Image viewport position:', {
+        x: rect.x,
+        y: rect.y,
+        width: rect.width,
+        height: rect.height,
+      });
+    }
+
+    // Send message to background script to capture screenshot
     await browser.runtime.sendMessage({
-      type: 'CAPTURE_IMAGE',
-      data: { src, alt, dataUrl },
+      type: 'CAPTURE_SCREENSHOT',
+      data: {
+        rect: {
+          x: Math.floor(rect.x),
+          y: Math.floor(rect.y),
+          width: Math.ceil(rect.width),
+          height: Math.ceil(rect.height),
+        },
+        alt,
+        originalSrc: src,
+      },
     });
 
     // Visual feedback - briefly show the image was captured
     showCaptureConfirmation(img);
   } catch (error) {
-    console.error('Failed to capture image:', error);
-
-    // Determine error reason
-    let errorMessage = 'Image captured (URL only - could not embed)';
-    const errorStr = error instanceof Error ? error.message : String(error);
-
-    if (errorStr.includes('tainted') || errorStr.includes('CORS') || errorStr.includes('cross-origin')) {
-      errorMessage = 'Image captured (URL only - CORS restricted)';
-    } else if (errorStr.includes('load')) {
-      errorMessage = 'Image captured (URL only - failed to load)';
-    }
-
-    // Try fallback: send without data URL (will store original URL only)
-    try {
-      await browser.runtime.sendMessage({
-        type: 'CAPTURE_IMAGE',
-        data: { src, alt, dataUrl: '' },
-      });
-
-      // Show visual feedback with warning
-      showCaptureConfirmation(img);
-      console.warn(errorMessage);
-    } catch (fallbackError) {
-      console.error('Fallback capture also failed:', fallbackError);
-    }
+    console.error('Failed to capture image screenshot:', error);
   }
 }
 
@@ -220,68 +396,6 @@ async function captureText(text: string) {
     showTextCaptureConfirmation();
   } catch (error) {
     console.error('Failed to capture text:', error);
-  }
-}
-
-async function imageToDataURL(img: HTMLImageElement): Promise<string> {
-  return new Promise((resolve, reject) => {
-    // If image is already loaded, convert it
-    if (img.complete && img.naturalWidth > 0) {
-      convertToDataURL(img, resolve, reject);
-    } else {
-      // Wait for image to load
-      const loadHandler = () => {
-        convertToDataURL(img, resolve, reject);
-        img.removeEventListener('load', loadHandler);
-        img.removeEventListener('error', errorHandler);
-      };
-
-      const errorHandler = () => {
-        img.removeEventListener('load', loadHandler);
-        img.removeEventListener('error', errorHandler);
-        reject(new Error('Image failed to load'));
-      };
-
-      img.addEventListener('load', loadHandler);
-      img.addEventListener('error', errorHandler);
-    }
-  });
-}
-
-function convertToDataURL(
-  img: HTMLImageElement,
-  resolve: (value: string) => void,
-  reject: (reason: Error) => void
-) {
-  try {
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-
-    if (!ctx) {
-      reject(new Error('Could not get canvas context'));
-      return;
-    }
-
-    // Set canvas dimensions to match image
-    canvas.width = img.naturalWidth || img.width;
-    canvas.height = img.naturalHeight || img.height;
-
-    // Draw image to canvas
-    ctx.drawImage(img, 0, 0);
-
-    // Convert to data URL
-    // Using JPEG with quality 0.8 to reduce size while maintaining quality
-    try {
-      const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
-      resolve(dataUrl);
-    } catch {
-      // If JPEG conversion fails (e.g., for transparent images), try PNG
-      const dataUrl = canvas.toDataURL('image/png');
-      resolve(dataUrl);
-    }
-  } catch (err) {
-    // CORS error or other canvas error
-    reject(new Error(`Canvas conversion failed: ${String(err)}`));
   }
 }
 
@@ -310,13 +424,13 @@ function showTextCaptureConfirmation() {
     z-index: 999999;
     font-family: system-ui, -apple-system, sans-serif;
     font-size: 14px;
-    animation: slideIn 0.3s ease-out;
+    animation: slide-in 0.3s ease-out;
   `;
 
   document.body.appendChild(notification);
 
   setTimeout(() => {
-    notification.style.animation = 'slideOut 0.3s ease-in';
+    notification.style.animation = 'slide-out 0.3s ease-in';
     setTimeout(() => {
       document.body.removeChild(notification);
     }, 300);

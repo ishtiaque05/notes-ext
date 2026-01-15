@@ -114,9 +114,7 @@ export async function safeStorageSet(data: Record<string, unknown>): Promise<voi
       throw new StorageQuotaError();
     }
 
-    throw new StorageError(
-      error instanceof Error ? error.message : 'Unknown storage error'
-    );
+    throw new StorageError(error instanceof Error ? error.message : 'Unknown storage error');
   }
 }
 

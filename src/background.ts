@@ -123,6 +123,8 @@ browser.runtime.onMessage.addListener((message: Message): Promise<MessageRespons
   }
 
   switch (message.type) {
+    case 'FETCH_IMAGE':
+      return handleFetchImage(message.data.url);
     case 'CAPTURE_LINK':
       return handleCaptureLink(message.data);
     case 'CAPTURE_IMAGE':
@@ -156,6 +158,49 @@ browser.runtime.onMessage.addListener((message: Message): Promise<MessageRespons
       return Promise.resolve({ success: false, error: 'Unknown message type' });
   }
 });
+
+// Handler for fetching images (bypasses CSP restrictions)
+async function handleFetchImage(url: string): Promise<MessageResponse<{ dataUrl: string }>> {
+  try {
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('Background: Fetching image from', url);
+    }
+
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const blob = await response.blob();
+
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('Background: Image fetched, size:', blob.size, 'type:', blob.type);
+    }
+
+    // Convert blob to data URL
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        if (typeof reader.result === 'string') {
+          resolve(reader.result);
+        } else {
+          reject(new Error('Failed to read blob as data URL'));
+        }
+      };
+      reader.onerror = () => reject(new Error('FileReader error'));
+      reader.readAsDataURL(blob);
+    });
+
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('Background: Conversion successful, data URL length:', dataUrl.length);
+    }
+
+    return { success: true, data: { dataUrl } };
+  } catch (error) {
+    console.error('Background: Error fetching image:', error);
+    return { success: false, error: String(error) };
+  }
+}
 
 // Handler for capturing links
 async function handleCaptureLink(data: {
