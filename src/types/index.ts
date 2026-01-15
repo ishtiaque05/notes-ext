@@ -48,20 +48,20 @@ export type Message =
   | { type: 'CAPTURE_TEXT'; data: { text: string; sourceUrl: string } }
   | { type: 'FETCH_IMAGE'; data: { url: string } }
   | {
-    type: 'REQUEST_SCREENSHOT';
-    data: {
-      dimensions: { width: number; height: number; x: number; y: number };
-      pixelRatio?: number;
-    };
-  }
+      type: 'REQUEST_SCREENSHOT';
+      data: {
+        dimensions: { width: number; height: number; x: number; y: number };
+        pixelRatio?: number;
+      };
+    }
   | {
-    type: 'CAPTURE_SCREENSHOT';
-    data: {
-      dataUrl: string;
-      sourceUrl: string;
-      dimensions: { width: number; height: number; x: number; y: number };
-    };
-  }
+      type: 'CAPTURE_SCREENSHOT';
+      data: {
+        dataUrl: string;
+        sourceUrl: string;
+        dimensions: { width: number; height: number; x: number; y: number };
+      };
+    }
   | { type: 'GET_ITEMS' }
   | { type: 'DELETE_ITEM'; data: { id: string } }
   | { type: 'REORDER_ITEMS'; data: { items: CapturedItem[] } }
