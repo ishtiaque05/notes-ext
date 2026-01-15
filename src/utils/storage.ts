@@ -38,8 +38,10 @@ export async function getStorageInfo(): Promise<StorageInfo> {
   }
 
   // Get item count
-  const data = await browser.storage.local.get('items');
-  const items = (data.items as unknown[] | undefined) || [];
+  const STORAGE_KEY = 'notesCollectorData';
+  const data = await browser.storage.local.get(STORAGE_KEY);
+  const storageData = data[STORAGE_KEY] || {};
+  const items = (storageData.items as unknown[] | undefined) || [];
   const itemCount = items.length;
 
   // Firefox doesn't provide quota info via the storage API

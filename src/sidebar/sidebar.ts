@@ -1,834 +1,222 @@
-// Sidebar UI logic for Notes Collector extension
+/**
+ * Sidebar UI logic for Notes Collector extension
+ */
 import './sidebar.scss';
-import type { CapturedItem } from '../types';
+import { CapturedItem, Message } from '../types';
+import { createItemElement } from './components/itemRenderer';
+import { setupDragAndDrop, DragDropHandlers } from './dragDrop';
+import { generatePdf } from './pdfGenerator';
 
-// pdfMake is loaded via script tag in sidebar.html
-// Type definitions for pdfMake global
-interface PdfDocument {
-  download: (filename: string) => void;
-  open: () => void;
-  print: () => void;
-}
+class SidebarController {
+  private capturedItems: CapturedItem[] = [];
+  private isExtensionEnabled = true;
 
-interface PdfMake {
-  createPdf: (documentDefinition: Record<string, unknown>) => PdfDocument;
-}
+  // DOM elements
+  private itemsContainer!: HTMLElement;
+  private savePdfBtn!: HTMLButtonElement;
+  private clearAllBtn!: HTMLButtonElement;
+  private toggleEnabledBtn!: HTMLButtonElement;
+  private subtitle!: HTMLElement;
 
-declare const pdfMake: PdfMake;
+  private dndHandlers!: DragDropHandlers;
 
-let capturedItems: CapturedItem[] = [];
-let isExtensionEnabled = true;
+  constructor() {
+    this.init();
+  }
 
-// DOM elements
-let itemsContainer: HTMLElement;
-let savePdfBtn: HTMLButtonElement;
-let clearAllBtn: HTMLButtonElement;
-let toggleEnabledBtn: HTMLButtonElement;
-let subtitle: HTMLElement;
-
-if (process.env.NODE_ENV === 'development') {
-  console.warn('Notes Collector: Sidebar script loaded');
-}
-
-// Initialize sidebar
-document.addEventListener('DOMContentLoaded', () => {
-  void (async () => {
-    if (process.env.NODE_ENV === 'development') {
-      console.warn('Sidebar DOM loaded');
+  private init() {
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', () => { void this.onReady(); });
+    } else {
+      void this.onReady();
     }
+    browser.runtime.onMessage.addListener((m: any) => { this.handleBackgroundMessage(m as Message); return true; });
+  }
 
+  private async onReady() {
     // Get DOM elements
-    itemsContainer = document.getElementById('items-container')!;
-    savePdfBtn = document.getElementById('save-pdf-btn') as HTMLButtonElement;
-    clearAllBtn = document.getElementById('clear-all-btn') as HTMLButtonElement;
-    toggleEnabledBtn = document.getElementById('toggle-enabled-btn') as HTMLButtonElement;
-    subtitle = document.querySelector('.subtitle')!;
+    this.itemsContainer = document.getElementById('items-container')!;
+    this.savePdfBtn = document.getElementById('save-pdf-btn') as HTMLButtonElement;
+    this.clearAllBtn = document.getElementById('clear-all-btn') as HTMLButtonElement;
+    this.toggleEnabledBtn = document.getElementById('toggle-enabled-btn') as HTMLButtonElement;
+    this.subtitle = document.querySelector('.subtitle')!;
 
-    // Load items from storage
-    await loadItems();
+    // Setup DnD
+    this.dndHandlers = setupDragAndDrop(
+      (items) => this.handleReorder(items),
+      () => this.capturedItems
+    );
 
-    // Check if extension is enabled for current tab
-    await checkEnabledState();
+    // Initial load
+    await this.loadItems();
+    await this.checkEnabledState();
 
-    // Set up event listeners
-    savePdfBtn.addEventListener('click', () => {
-      void handleSavePdf();
-    });
-    clearAllBtn.addEventListener('click', () => {
-      void handleClearAll();
-    });
-    toggleEnabledBtn.addEventListener('click', () => {
-      void handleToggleEnabled();
-    });
+    // Event listeners
+    this.savePdfBtn.addEventListener('click', () => { void generatePdf(this.capturedItems); });
+    this.clearAllBtn.addEventListener('click', () => { void this.handleClearAll(); });
+    this.toggleEnabledBtn.addEventListener('click', () => { void this.handleToggleEnabled(); });
+  }
 
-    // Listen for new items from background script
-    browser.runtime.onMessage.addListener(handleBackgroundMessage);
-  })();
-});
+  private async loadItems() {
+    try {
+      const response = await browser.runtime.sendMessage({ type: 'GET_ITEMS' });
+      if (response.success) {
+        this.capturedItems = (response.data as CapturedItem[]).sort((a, b) => a.order - b.order);
+        this.renderItems();
+        this.updateUI();
+      }
+    } catch (e) {
+      console.error('Failed to load items:', e);
+    }
+  }
 
-// Load items from storage
-async function loadItems() {
-  try {
-    const response = (await browser.runtime.sendMessage({ type: 'GET_ITEMS' })) as {
-      success: boolean;
-      data?: CapturedItem[];
+  private async checkEnabledState() {
+    try {
+      const tabs = await browser.tabs.query({ active: true, currentWindow: true });
+      const tabId = tabs[0]?.id;
+      if (!tabId) return;
+
+      const response = await browser.runtime.sendMessage({
+        type: 'CHECK_SITE_ENABLED',
+        data: { tabId },
+      });
+      if (response.success) {
+        this.isExtensionEnabled = response.data.enabled;
+        this.updateToggleButton();
+      }
+    } catch (e) {
+      console.error('Failed to check enabled state:', e);
+    }
+  }
+
+  private renderItems() {
+    this.itemsContainer.innerHTML = '';
+
+    if (this.capturedItems.length === 0) {
+      this.itemsContainer.innerHTML = '<div class="empty-state">No items captured yet. Click on links, images or select text while holding Ctrl+Shift!</div>';
+      return;
+    }
+
+    const callbacks = {
+      onDelete: (id: string) => this.handleDeleteItem(id),
+      onDragStart: (e: DragEvent) => this.dndHandlers.handleDragStart(e),
+      onDragOver: (e: DragEvent) => this.dndHandlers.handleDragOver(e),
+      onDrop: (e: DragEvent) => this.dndHandlers.handleDrop(e),
+      onDragEnd: (e: DragEvent) => this.dndHandlers.handleDragEnd(e),
+      onDragEnter: (e: DragEvent) => this.dndHandlers.handleDragEnter(e),
+      onDragLeave: (e: DragEvent) => this.dndHandlers.handleDragLeave(e),
     };
 
-    if (response.success && response.data) {
-      capturedItems = response.data;
-      renderItems();
-      updateUI();
-    }
-  } catch (error) {
-    console.error('Failed to load items:', error);
-  }
-}
-
-// Helper to get current active tab ID
-async function getActiveTabId(): Promise<number | null> {
-  try {
-    const tabs = await browser.tabs.query({ active: true, currentWindow: true });
-    return tabs[0]?.id || null;
-  } catch {
-    return null;
-  }
-}
-
-// Check if extension is enabled for current tab
-async function checkEnabledState() {
-  const tabId = await getActiveTabId();
-  if (!tabId) {
-    return;
-  }
-
-  try {
-    const response = (await browser.runtime.sendMessage({
-      type: 'CHECK_SITE_ENABLED',
-      data: { tabId },
-    })) as {
-      success: boolean;
-      data?: { enabled: boolean };
-    };
-
-    if (response.success && response.data) {
-      isExtensionEnabled = response.data.enabled;
-      updateToggleButton();
-    }
-  } catch (error) {
-    console.error('Failed to check enabled state:', error);
-  }
-}
-
-// Render all items to the DOM
-function renderItems() {
-  // Clear container
-  itemsContainer.innerHTML = '';
-
-  if (capturedItems.length === 0) {
-    itemsContainer.innerHTML =
-      '<p class="empty-state">No items captured yet. Click on links/images, Ctrl+Click selected text, or Shift+Click to capture screenshots.</p>';
-    return;
-  }
-
-  // Sort by order
-  const sortedItems = [...capturedItems].sort((a, b) => a.order - b.order);
-
-  // Create list container
-  const listElement = document.createElement('ul');
-  listElement.className = 'items-list';
-
-  // Render each item
-  sortedItems.forEach((item) => {
-    const itemElement = renderItem(item);
-    listElement.appendChild(itemElement);
-  });
-
-  itemsContainer.appendChild(listElement);
-}
-
-// Render a single item
-function renderItem(item: CapturedItem): HTMLLIElement {
-  const li = document.createElement('li');
-  li.className = 'item';
-  li.dataset.itemId = item.id;
-  li.draggable = true;
-
-  if (item.type === 'link' && 'href' in item.metadata) {
-    li.innerHTML = `
-      <div class="item-content">
-        <span class="item-drag-handle" title="Drag to reorder">⋮⋮</span>
-        <span class="item-icon link-icon">🔗</span>
-        <div class="item-text">
-          <div class="item-title">${escapeHtml(item.metadata.text)}</div>
-          <div class="item-url">${escapeHtml(item.metadata.href)}</div>
-        </div>
-      </div>
-      <div class="item-actions">
-        <button class="delete-btn" title="Delete" data-id="${item.id}">✕</button>
-      </div>
-    `;
-  } else if (item.type === 'image' && 'alt' in item.metadata && 'originalSrc' in item.metadata) {
-    li.innerHTML = `
-      <div class="item-content">
-        <span class="item-drag-handle" title="Drag to reorder">⋮⋮</span>
-        <img class="item-thumbnail" src="${escapeHtml(item.content)}" alt="${escapeHtml(item.metadata.alt)}" />
-        <div class="item-text">
-          <div class="item-title">${escapeHtml(item.metadata.alt)}</div>
-          <div class="item-url">${escapeHtml(item.metadata.originalSrc)}</div>
-        </div>
-      </div>
-      <div class="item-actions">
-        <button class="delete-btn" title="Delete" data-id="${item.id}">✕</button>
-      </div>
-    `;
-  } else if (item.type === 'text' && 'text' in item.metadata && 'sourceUrl' in item.metadata) {
-    const truncatedText =
-      item.metadata.text.length > 100
-        ? item.metadata.text.substring(0, 100) + '...'
-        : item.metadata.text;
-
-    li.innerHTML = `
-      <div class="item-content">
-        <span class="item-drag-handle" title="Drag to reorder">⋮⋮</span>
-        <span class="item-icon text-icon">📝</span>
-        <div class="item-text">
-          <div class="item-title">${escapeHtml(truncatedText)}</div>
-          <div class="item-url">${escapeHtml(item.metadata.sourceUrl)}</div>
-        </div>
-      </div>
-      <div class="item-actions">
-        <button class="delete-btn" title="Delete" data-id="${item.id}">✕</button>
-      </div>
-    `;
-  } else if (item.type === 'screenshot' && 'dimensions' in item.metadata) {
-    li.innerHTML = `
-      <div class="item-content">
-        <span class="item-drag-handle" title="Drag to reorder">⋮⋮</span>
-        <img class="item-thumbnail" src="${escapeHtml(item.content)}" alt="${escapeHtml(item.metadata.alt)}" />
-        <div class="item-text">
-          <div class="item-title">${escapeHtml(item.metadata.alt)}</div>
-          <div class="item-url">${escapeHtml(item.metadata.sourceUrl)}</div>
-        </div>
-      </div>
-      <div class="item-actions">
-        <button class="delete-btn" title="Delete" data-id="${item.id}">✕</button>
-      </div>
-    `;
-  }
-
-  // Add delete button event listener
-  const deleteBtn = li.querySelector('.delete-btn') as HTMLButtonElement;
-  if (deleteBtn) {
-    deleteBtn.addEventListener('click', () => {
-      void handleDeleteItem(item.id);
+    this.capturedItems.forEach((item) => {
+      this.itemsContainer.appendChild(createItemElement(item, callbacks));
     });
   }
 
-  // Add drag event listeners
-  li.addEventListener('dragstart', handleDragStart);
-  li.addEventListener('dragover', handleDragOver);
-  li.addEventListener('drop', handleDrop);
-  li.addEventListener('dragend', handleDragEnd);
-  li.addEventListener('dragenter', handleDragEnter);
-  li.addEventListener('dragleave', handleDragLeave);
+  private updateUI() {
+    const hasItems = this.capturedItems.length > 0;
+    this.savePdfBtn.disabled = !hasItems;
+    this.clearAllBtn.disabled = !hasItems;
 
-  return li;
-}
-
-// Escape HTML to prevent XSS
-function escapeHtml(text: string): string {
-  const div = document.createElement('div');
-  div.textContent = text;
-  return div.innerHTML;
-}
-
-// Update UI state (button states, item count)
-function updateUI() {
-  const hasItems = capturedItems.length > 0;
-
-  // Update buttons
-  savePdfBtn.disabled = !hasItems;
-  clearAllBtn.disabled = !hasItems;
-
-  // Update subtitle with item count
-  const count = capturedItems.length;
-  const linkCount = capturedItems.filter((item) => item.type === 'link').length;
-  const imageCount = capturedItems.filter((item) => item.type === 'image').length;
-  const textCount = capturedItems.filter((item) => item.type === 'text').length;
-  const screenshotCount = capturedItems.filter((item) => item.type === 'screenshot').length;
-
-  if (count === 0) {
-    subtitle.textContent = 'Captured items will appear here';
-  } else {
-    const parts = [];
-    if (linkCount > 0) parts.push(`${linkCount} link${linkCount !== 1 ? 's' : ''}`);
-    if (imageCount > 0) parts.push(`${imageCount} image${imageCount !== 1 ? 's' : ''}`);
-    if (textCount > 0) parts.push(`${textCount} text${textCount !== 1 ? 's' : ''}`);
-    if (screenshotCount > 0)
-      parts.push(`${screenshotCount} screenshot${screenshotCount !== 1 ? 's' : ''}`);
-
-    subtitle.textContent = `${count} item${count !== 1 ? 's' : ''} (${parts.join(', ')})`;
-  }
-}
-
-// Handle messages from background script
-function handleBackgroundMessage(message: { type: string; data?: unknown }) {
-  console.warn('=== SIDEBAR RECEIVED MESSAGE ===', message);
-
-  if (
-    message.type === 'ITEM_ADDED' &&
-    message.data &&
-    typeof message.data === 'object' &&
-    'id' in message.data &&
-    'type' in message.data
-  ) {
-    capturedItems.push(message.data as CapturedItem);
-    renderItems();
-    updateUI();
-  } else if (
-    message.type === 'ITEM_DELETED' &&
-    message.data &&
-    typeof message.data === 'object' &&
-    'id' in message.data
-  ) {
-    const data = message.data as { id: string };
-    capturedItems = capturedItems.filter((item) => item.id !== data.id);
-    renderItems();
-    updateUI();
-  } else if (message.type === 'ITEMS_CLEARED') {
-    capturedItems = [];
-    renderItems();
-    updateUI();
-  } else if (
-    message.type === 'SITE_ENABLED_CHANGED' &&
-    message.data &&
-    typeof message.data === 'object' &&
-    'enabled' in message.data
-  ) {
-    const data = message.data as { enabled: boolean };
-    console.warn('=== UPDATING ENABLED STATE TO:', data.enabled);
-    isExtensionEnabled = data.enabled;
-    updateToggleButton();
-  } else if (
-    message.type === 'STORAGE_WARNING' &&
-    message.data &&
-    typeof message.data === 'object' &&
-    'message' in message.data
-  ) {
-    const data = message.data as { message: string };
-    showNotification(data.message, 'warning');
-  }
-}
-
-// Handle delete item
-async function handleDeleteItem(id: string) {
-  if (!confirm('Are you sure you want to delete this item?')) {
-    return;
-  }
-
-  try {
-    const response = (await browser.runtime.sendMessage({
-      type: 'DELETE_ITEM',
-      data: { id },
-    })) as { success: boolean };
-
-    if (response.success) {
-      capturedItems = capturedItems.filter((item) => item.id !== id);
-      renderItems();
-      updateUI();
+    const count = this.capturedItems.length;
+    if (count === 0) {
+      this.subtitle.textContent = 'Captured items will appear here';
+    } else {
+      const types = this.capturedItems.reduce((acc: Record<string, number>, item) => {
+        acc[item.type] = (acc[item.type] || 0) + 1;
+        return acc;
+      }, {});
+      const parts = Object.entries(types).map(([type, n]) => `${n} ${type}${n !== 1 ? 's' : ''}`);
+      this.subtitle.textContent = `${count} item${count !== 1 ? 's' : ''} (${parts.join(', ')})`;
     }
-  } catch (error) {
-    console.error('Failed to delete item:', error);
-  }
-}
-
-// Handle clear all
-async function handleClearAll() {
-  if (!confirm('Are you sure you want to clear all items?')) {
-    return;
   }
 
-  try {
-    const response = (await browser.runtime.sendMessage({ type: 'CLEAR_ALL' })) as {
-      success: boolean;
-    };
-
-    if (response.success) {
-      capturedItems = [];
-      renderItems();
-      updateUI();
-    }
-  } catch (error) {
-    console.error('Failed to clear items:', error);
-  }
-}
-
-// Handle save as PDF
-function handleSavePdf() {
-  if (typeof pdfMake === 'undefined') {
-    alert('PDF library not loaded. Please refresh the sidebar.');
-    return;
+  private updateToggleButton() {
+    this.toggleEnabledBtn.textContent = this.isExtensionEnabled ? 'Enabled' : 'Disabled';
+    this.toggleEnabledBtn.className = `toggle-btn ${this.isExtensionEnabled ? 'enabled' : 'disabled'}`;
   }
 
-  if (capturedItems.length === 0) {
-    alert('No items to export');
-    return;
-  }
+  private async handleToggleEnabled() {
+    try {
+      const tabs = await browser.tabs.query({ active: true, currentWindow: true });
+      const tabId = tabs[0]?.id;
+      if (!tabId) return;
 
-  try {
-    if (process.env.NODE_ENV === 'development') {
-      console.warn('=== GENERATING PDF ===');
-      console.warn('Total items:', capturedItems.length);
-    }
-
-    // Build PDF document
-    const docDefinition = buildPdfDocument();
-
-    if (process.env.NODE_ENV === 'development') {
-      console.warn('Document definition built successfully');
-      console.warn('Content items:', docDefinition.content.length);
-    }
-
-    // Generate filename with timestamp
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
-    const filename = `notes-${timestamp}.pdf`;
-
-    if (process.env.NODE_ENV === 'development') {
-      console.warn('Creating PDF with filename:', filename);
-    }
-
-    // Create and download PDF using pdfMake's built-in download
-    // Note: This downloads directly to browser's Downloads folder without file picker
-    pdfMake.createPdf(docDefinition).download(filename);
-
-    if (process.env.NODE_ENV === 'development') {
-      console.warn('PDF download initiated');
-    }
-
-    // Show success notification
-    setTimeout(() => {
-      showNotification('PDF downloaded to your Downloads folder!', 'success');
-    }, 500);
-  } catch (error) {
-    console.error('Failed to generate PDF:', error);
-    if (process.env.NODE_ENV === 'development') {
-      console.error('Error details:', error);
-    }
-    showNotification('Failed to generate PDF. Please try again.', 'error');
-  }
-}
-
-// Build PDF document definition from captured items
-function buildPdfDocument() {
-  const content: Record<string, unknown>[] = [];
-
-  // Add header with timestamp
-  const now = new Date();
-  const dateStr = now.toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-
-  content.push(
-    { text: 'Notes Collector Export', style: 'title' },
-    { text: dateStr, style: 'subtitle' },
-    { text: `Total items: ${capturedItems.length}`, style: 'subtitle', margin: [0, 0, 0, 20] }
-  );
-
-  // Sort items by order
-  const sortedItems = [...capturedItems].sort((a, b) => a.order - b.order);
-
-  // Add each item
-  sortedItems.forEach((item, index) => {
-    // Add item number
-    content.push({
-      text: `${index + 1}.`,
-      style: 'itemNumber',
-      margin: [0, 10, 0, 5],
-    });
-
-    if (item.type === 'link' && 'href' in item.metadata) {
-      // Add clickable link
-      content.push({
-        text: item.metadata.text || item.metadata.href,
-        link: item.metadata.href,
-        style: 'link',
-        margin: [10, 0, 0, 2],
+      await browser.runtime.sendMessage({
+        type: 'TOGGLE_SITE_ENABLED',
+        data: { tabId },
       });
 
-      // Add URL below if text is different
-      if (item.metadata.text && item.metadata.text !== item.metadata.href) {
-        content.push({
-          text: item.metadata.href,
-          style: 'url',
-          margin: [10, 0, 0, 0],
-        });
-      }
-    } else if (item.type === 'image' && 'alt' in item.metadata && 'originalSrc' in item.metadata) {
-      // Add image - check if data URL is valid
-      if (item.content && item.content.startsWith('data:image/')) {
-        try {
-          content.push({
-            image: item.content, // data URL
-            width: 400,
-            margin: [10, 0, 0, 5],
-          });
-
-          // Add alt text and source URL
-          if (item.metadata.alt) {
-            content.push({
-              text: item.metadata.alt,
-              style: 'imageCaption',
-              margin: [10, 5, 0, 2],
-            });
-          }
-
-          content.push({
-            text: item.metadata.originalSrc,
-            style: 'url',
-            margin: [10, 0, 0, 0],
-          });
-        } catch (error) {
-          console.error('Error adding image to PDF:', error);
-          // Fallback if image fails to embed
-          content.push({
-            text: `[Image: ${item.metadata.alt || 'No description'}]`,
-            style: 'error',
-            margin: [10, 0, 0, 2],
-          });
-          content.push({
-            text: item.metadata.originalSrc,
-            style: 'url',
-            margin: [10, 0, 0, 0],
-          });
-        }
-      } else {
-        // Image data not available, show placeholder
-        content.push({
-          text: `[Image: ${item.metadata.alt || 'No description'}]`,
-          style: 'error',
-          margin: [10, 0, 0, 2],
-        });
-        content.push({
-          text: item.metadata.originalSrc,
-          style: 'url',
-          margin: [10, 0, 0, 0],
-        });
-      }
-    } else if (item.type === 'text' && 'text' in item.metadata && 'sourceUrl' in item.metadata) {
-      // Add captured text
-      content.push({
-        text: item.metadata.text,
-        style: 'capturedText',
-        margin: [10, 0, 0, 5],
-      });
-
-      // Add source URL
-      content.push({
-        text: `Source: ${item.metadata.sourceUrl}`,
-        style: 'url',
-        margin: [10, 0, 0, 0],
-      });
-    } else if (item.type === 'screenshot' && 'dimensions' in item.metadata) {
-      // Add screenshot - check if data URL is valid
-      if (item.content && item.content.startsWith('data:image/')) {
-        try {
-          content.push({
-            image: item.content, // data URL
-            width: 400,
-            margin: [10, 0, 0, 5],
-          });
-
-          // Add alt text and source URL
-          if (item.metadata.alt) {
-            content.push({
-              text: item.metadata.alt,
-              style: 'imageCaption',
-              margin: [10, 5, 0, 2],
-            });
-          }
-
-          content.push({
-            text: item.metadata.sourceUrl,
-            style: 'url',
-            margin: [10, 0, 0, 0],
-          });
-        } catch (error) {
-          console.error('Error adding screenshot to PDF:', error);
-          // Fallback if screenshot fails to embed
-          content.push({
-            text: `[Screenshot: ${item.metadata.alt || 'No description'}]`,
-            style: 'error',
-            margin: [10, 0, 0, 2],
-          });
-          content.push({
-            text: item.metadata.sourceUrl,
-            style: 'url',
-            margin: [10, 0, 0, 0],
-          });
-        }
-      } else {
-        // Screenshot data not available, show placeholder
-        content.push({
-          text: `[Screenshot: ${item.metadata.alt || 'No description'}]`,
-          style: 'error',
-          margin: [10, 0, 0, 2],
-        });
-        content.push({
-          text: item.metadata.sourceUrl,
-          style: 'url',
-          margin: [10, 0, 0, 0],
-        });
-      }
+      // State will be updated via message from background
+    } catch (e) {
+      console.error('Toggle failed:', e);
     }
-  });
-
-  // Return document definition
-  return {
-    content,
-    styles: {
-      title: {
-        fontSize: 22,
-        bold: true,
-        margin: [0, 0, 0, 5],
-      },
-      subtitle: {
-        fontSize: 11,
-        color: '#666666',
-        margin: [0, 0, 0, 2],
-      },
-      itemNumber: {
-        fontSize: 14,
-        bold: true,
-        color: '#333333',
-      },
-      link: {
-        fontSize: 12,
-        color: '#0066cc',
-        decoration: 'underline',
-      },
-      url: {
-        fontSize: 9,
-        color: '#666666',
-        italics: true,
-      },
-      imageCaption: {
-        fontSize: 10,
-        color: '#333333',
-        italics: true,
-      },
-      capturedText: {
-        fontSize: 11,
-        color: '#000000',
-        background: '#f5f5f5',
-        margin: [5, 5, 5, 5],
-      },
-      error: {
-        fontSize: 11,
-        color: '#cc0000',
-        italics: true,
-      },
-    },
-    pageMargins: [40, 60, 40, 60],
-  };
-}
-
-// Handle toggle enabled/disabled
-async function handleToggleEnabled() {
-  console.warn('=== BUTTON CLICKED ===');
-
-  const tabId = await getActiveTabId();
-  if (!tabId) {
-    alert('Could not determine current tab');
-    return;
   }
 
-  console.warn('Current tab ID:', tabId);
-  console.warn('Current enabled state BEFORE:', isExtensionEnabled);
-
-  try {
-    // Send message to background to toggle state
-    // Background now awaits the full toggle before responding
-    const response = (await browser.runtime.sendMessage({
-      type: 'TOGGLE_SITE_ENABLED',
-      data: { tabId },
-    })) as { success: boolean };
-
-    console.warn('Toggle response:', response);
-
-    // After toggling, check the new state
-    await checkEnabledState();
-  } catch (error) {
-    console.error('Failed to toggle extension state:', error);
-  }
-}
-
-// Update toggle button appearance
-function updateToggleButton() {
-  const iconSpan = toggleEnabledBtn.querySelector('.toggle-icon');
-  const textSpan = toggleEnabledBtn.querySelector('.toggle-text');
-
-  console.warn('updateToggleButton called, isExtensionEnabled:', isExtensionEnabled);
-
-  if (isExtensionEnabled) {
-    toggleEnabledBtn.classList.remove('disabled');
-    toggleEnabledBtn.title = 'Disable extension on current page';
-    if (iconSpan) iconSpan.textContent = '✓';
-    if (textSpan) textSpan.textContent = 'Enabled';
-  } else {
-    toggleEnabledBtn.classList.add('disabled');
-    toggleEnabledBtn.title = 'Enable extension on current page';
-    if (iconSpan) iconSpan.textContent = '✕';
-    if (textSpan) textSpan.textContent = 'Disabled';
-  }
-}
-
-// Drag and drop state
-let draggedElement: HTMLElement | null = null;
-let draggedItemId: string | null = null;
-
-// Handle drag start
-function handleDragStart(event: DragEvent) {
-  const target = event.currentTarget as HTMLElement;
-  draggedElement = target;
-  draggedItemId = target.dataset.itemId || null;
-
-  target.classList.add('dragging');
-
-  // Set drag data
-  if (event.dataTransfer) {
-    event.dataTransfer.effectAllowed = 'move';
-    event.dataTransfer.setData('text/html', target.innerHTML);
-  }
-}
-
-// Handle drag over
-function handleDragOver(event: DragEvent) {
-  event.preventDefault();
-
-  if (event.dataTransfer) {
-    event.dataTransfer.dropEffect = 'move';
-  }
-
-  return false;
-}
-
-// Handle drag enter
-function handleDragEnter(event: DragEvent) {
-  const target = event.currentTarget as HTMLElement;
-
-  // Don't add class to the dragged element itself
-  if (target !== draggedElement) {
-    target.classList.add('drag-over');
-  }
-}
-
-// Handle drag leave
-function handleDragLeave(event: DragEvent) {
-  const target = event.currentTarget as HTMLElement;
-  target.classList.remove('drag-over');
-}
-
-// Handle drop
-function handleDrop(event: DragEvent) {
-  event.preventDefault();
-  event.stopPropagation();
-
-  const target = event.currentTarget as HTMLElement;
-  target.classList.remove('drag-over');
-
-  // Don't do anything if dropping on itself
-  if (draggedElement === target || !draggedItemId) {
-    return false;
-  }
-
-  const targetItemId = target.dataset.itemId;
-  if (!targetItemId) {
-    return false;
-  }
-
-  // Find the indices of dragged and target items
-  const draggedIndex = capturedItems.findIndex((item) => item.id === draggedItemId);
-  const targetIndex = capturedItems.findIndex((item) => item.id === targetItemId);
-
-  if (draggedIndex === -1 || targetIndex === -1) {
-    return false;
-  }
-
-  // Reorder the items array
-  const reorderedItems = [...capturedItems];
-  const [draggedItem] = reorderedItems.splice(draggedIndex, 1);
-  reorderedItems.splice(targetIndex, 0, draggedItem);
-
-  // Update order property for all items
-  reorderedItems.forEach((item, index) => {
-    item.order = index;
-  });
-
-  // Update local state
-  capturedItems = reorderedItems;
-
-  // Update storage
-  void updateItemsOrder();
-
-  // Re-render
-  renderItems();
-
-  return false;
-}
-
-// Handle drag end
-function handleDragEnd(event: DragEvent) {
-  const target = event.currentTarget as HTMLElement;
-  target.classList.remove('dragging');
-
-  // Remove drag-over class from all items
-  document.querySelectorAll('.drag-over').forEach((element) => {
-    element.classList.remove('drag-over');
-  });
-
-  // Reset drag state
-  draggedElement = null;
-  draggedItemId = null;
-}
-
-// Update items order in storage
-async function updateItemsOrder() {
-  try {
-    const response = (await browser.runtime.sendMessage({
-      type: 'REORDER_ITEMS',
-      data: { items: capturedItems },
-    })) as { success: boolean };
-
-    if (!response.success) {
-      console.error('Failed to update items order');
-    }
-  } catch (error) {
-    console.error('Failed to update items order:', error);
-  }
-}
-
-// Show notification message
-function showNotification(message: string, type: 'success' | 'error' | 'warning') {
-  // Create notification element
-  const notification = document.createElement('div');
-  notification.className = `notification notification-${type}`;
-  notification.textContent = message;
-
-  // Add to DOM
-  document.body.appendChild(notification);
-
-  // Remove after duration (5s for warnings, 3s for others)
-  const duration = type === 'warning' ? 5000 : 3000;
-  setTimeout(() => {
-    notification.style.animation = 'slide-out 0.3s ease-in';
-    setTimeout(() => {
-      if (document.body.contains(notification)) {
-        document.body.removeChild(notification);
+  private async handleDeleteItem(id: string) {
+    try {
+      const response = await browser.runtime.sendMessage({ type: 'DELETE_ITEM', data: { id } });
+      if (response.success) {
+        this.capturedItems = this.capturedItems.filter((i) => i.id !== id);
+        this.renderItems();
+        this.updateUI();
       }
-    }, 300);
-  }, duration);
+    } catch (e) {
+      console.error('Delete failed:', e);
+    }
+  }
+
+  private async handleClearAll() {
+    if (!confirm('Are you sure you want to clear all captured items?')) return;
+    try {
+      const response = await browser.runtime.sendMessage({ type: 'CLEAR_ALL' });
+      if (response.success) {
+        this.capturedItems = [];
+        this.renderItems();
+        this.updateUI();
+      }
+    } catch (e) {
+      console.error('Clear failed:', e);
+    }
+  }
+
+  private async handleReorder(newItems: CapturedItem[]) {
+    this.capturedItems = newItems;
+    this.renderItems();
+    try {
+      await browser.runtime.sendMessage({ type: 'REORDER_ITEMS', data: { items: newItems } });
+    } catch (e) {
+      console.error('Reorder sync failed:', e);
+    }
+  }
+
+  private handleBackgroundMessage(message: Message | { type: string; data?: any; enabled?: boolean }) {
+    switch (message.type) {
+      case 'ITEM_ADDED':
+        this.capturedItems.push(message.data);
+        this.renderItems();
+        this.updateUI();
+        break;
+      case 'ITEM_DELETED':
+        this.capturedItems = this.capturedItems.filter((i) => (i as any).id !== (message.data as any).id);
+        this.renderItems();
+        this.updateUI();
+        break;
+      case 'ITEMS_CLEARED':
+        this.capturedItems = [];
+        this.renderItems();
+        this.updateUI();
+        break;
+      case 'SITE_ENABLED_CHANGED':
+        this.isExtensionEnabled = (message as any).enabled ?? (message as any).data?.enabled;
+        this.updateToggleButton();
+        break;
+      case 'STORAGE_WARNING':
+        alert((message.data as any).message);
+        break;
+    }
+  }
 }
+
+// Instantiate the controller
+const controller = new SidebarController();
+export default controller;
