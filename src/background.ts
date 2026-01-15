@@ -355,6 +355,64 @@ async function handleCaptureText(data: {
   }
 }
 
+// Helper function to crop a screenshot to the selected area
+async function cropScreenshot(
+  dataUrl: string,
+  dimensions: { width: number; height: number; x: number; y: number }
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      try {
+        // Create canvas with the cropped dimensions
+        const canvas = new OffscreenCanvas(dimensions.width, dimensions.height);
+        const ctx = canvas.getContext('2d');
+
+        if (!ctx) {
+          reject(new Error('Could not get canvas context'));
+          return;
+        }
+
+        // Draw the cropped portion of the screenshot
+        // Source: (x, y, width, height) from the original image
+        // Destination: (0, 0, width, height) on the canvas
+        ctx.drawImage(
+          img,
+          dimensions.x,
+          dimensions.y,
+          dimensions.width,
+          dimensions.height,
+          0,
+          0,
+          dimensions.width,
+          dimensions.height
+        );
+
+        // Convert canvas to blob and then to data URL
+        canvas
+          .convertToBlob({ type: 'image/png' })
+          .then((blob) => {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+              if (typeof reader.result === 'string') {
+                resolve(reader.result);
+              } else {
+                reject(new Error('Failed to convert blob to data URL'));
+              }
+            };
+            reader.onerror = () => reject(new Error('FileReader error'));
+            reader.readAsDataURL(blob);
+          })
+          .catch(reject);
+      } catch (err) {
+        reject(new Error(`Canvas cropping failed: ${String(err)}`));
+      }
+    };
+    img.onerror = () => reject(new Error('Failed to load screenshot image'));
+    img.src = dataUrl;
+  });
+}
+
 // Handler for requesting screenshot from content script
 async function handleRequestScreenshot(data: {
   dimensions: { width: number; height: number; x: number; y: number };
@@ -371,10 +429,12 @@ async function handleRequestScreenshot(data: {
     // Capture visible tab using browser's native API
     const dataUrl = await browser.tabs.captureVisibleTab({ format: 'png' });
 
-    // Now we need to crop the screenshot to the selected area
-    // We'll send it directly to handleCaptureScreenshot
+    // Crop the screenshot to the selected area
+    const croppedDataUrl = await cropScreenshot(dataUrl, data.dimensions);
+
+    // Store the cropped screenshot
     await handleCaptureScreenshot({
-      dataUrl,
+      dataUrl: croppedDataUrl,
       sourceUrl: tab.url || window.location.href,
       dimensions: data.dimensions,
     });
