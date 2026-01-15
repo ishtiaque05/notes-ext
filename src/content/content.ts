@@ -656,11 +656,36 @@ async function captureScreenshot(x: number, y: number, width: number, height: nu
   }
 }
 
+// Check if the site is enabled on startup
+async function checkSiteEnabled() {
+  try {
+    const response = (await browser.runtime.sendMessage({
+      type: 'CHECK_SITE_ENABLED',
+      data: { tabId: -1 },
+    })) as MessageResponse<{ enabled: boolean }>;
+
+    if (response && response.success && response.data) {
+      isEnabled = response.data.enabled;
+      updateDisabledState();
+
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('Notes Collector: Initial enabled state:', isEnabled);
+      }
+    }
+  } catch (e) {
+    console.error('Failed to check if site is enabled:', e);
+  }
+}
+
 // Initialize when DOM is ready
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', addHoverListeners);
+  document.addEventListener('DOMContentLoaded', () => {
+    addHoverListeners();
+    void checkSiteEnabled();
+  });
 } else {
   addHoverListeners();
+  void checkSiteEnabled();
 }
 
 if (process.env.NODE_ENV === 'development') {

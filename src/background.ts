@@ -14,8 +14,25 @@ import { checkStorageAvailable, safeStorageSet, getStorageWarning } from './util
 
 const STORAGE_KEY = 'notesCollectorData';
 
-// Runtime state for disabled tabs (not persisted)
-const disabledTabs = new Set<number>();
+// Helper to check if a URL is disabled based on its domain or parent domains
+function isUrlDisabled(url: string, disabledDomains: string[]): boolean {
+  try {
+    const hostname = new URL(url).hostname;
+    const parts = hostname.split('.');
+
+    // Check the exact hostname and all parent domains (except the TLD)
+    // For gist.github.com, check: gist.github.com, github.com
+    for (let i = 0; i <= parts.length - 2; i++) {
+      const domainToCheck = parts.slice(i).join('.');
+      if (disabledDomains.includes(domainToCheck)) {
+        return true;
+      }
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
 
 if (process.env.NODE_ENV === 'development') {
   console.warn('Notes Collector: Background service worker initialized');
@@ -34,8 +51,16 @@ browser.runtime.onInstalled.addListener(() => {
       const initialData: StorageData = {
         items: [],
         nextOrder: 0,
+        disabledDomains: [],
       };
       await browser.storage.local.set({ [STORAGE_KEY]: initialData });
+    } else {
+      // Ensure disabledDomains exists
+      const data = result[STORAGE_KEY] as StorageData;
+      if (!data.disabledDomains) {
+        data.disabledDomains = [];
+        await browser.storage.local.set({ [STORAGE_KEY]: data });
+      }
     }
 
     // Create context menu
@@ -63,48 +88,110 @@ browser.contextMenus.onClicked.addListener(
 
 // Update context menu when tab changes
 browser.tabs.onActivated.addListener((activeInfo) => {
-  const isDisabled = disabledTabs.has(activeInfo.tabId);
-  void updateContextMenu(isDisabled);
+  void (async () => {
+    try {
+      const tab = await browser.tabs.get(activeInfo.tabId);
+      if (tab.url) {
+        const storageData = await getStorageData();
+        const isDisabled = isUrlDisabled(tab.url, storageData.disabledDomains || []);
+        void updateContextMenu(isDisabled);
+      }
+    } catch {
+      // Tab might be closed or not have a URL
+    }
+  })();
 });
+
+// Update context menu when tab URL changes
+browser.tabs.onUpdated.addListener(
+  (_tabId: number, changeInfo: browser.tabs._OnUpdatedChangeInfo, tab: browser.tabs.Tab) => {
+    void (async () => {
+      if (changeInfo.url || (tab.url && changeInfo.status === 'complete')) {
+        const storageData = await getStorageData();
+        const isDisabled = isUrlDisabled(tab.url || '', storageData.disabledDomains || []);
+        void updateContextMenu(isDisabled);
+      }
+    })();
+  }
+);
 
 // Toggle site enabled/disabled for current tab
 async function toggleSiteEnabled(tabId: number) {
-  const isDisabled = disabledTabs.has(tabId);
+  try {
+    const tab = await browser.tabs.get(tabId);
+    if (!tab.url) return;
 
-  console.warn('=== BACKGROUND: toggleSiteEnabled called ===');
-  console.warn('Tab ID:', tabId);
-  console.warn('Is currently disabled:', isDisabled);
+    const hostname = new URL(tab.url).hostname;
+    const storageData = await getStorageData();
+    const disabledDomains = storageData.disabledDomains || [];
 
-  if (isDisabled) {
-    disabledTabs.delete(tabId);
-    await updateContextMenu(false);
-  } else {
-    disabledTabs.add(tabId);
-    await updateContextMenu(true);
-  }
+    // Find if the exact hostname or any parent domain is currently in the list
+    let index = -1;
+    let foundDomain = hostname;
 
-  // Calculate new state after toggling
-  const newEnabledState = !disabledTabs.has(tabId);
+    const parts = hostname.split('.');
+    for (let i = 0; i <= parts.length - 2; i++) {
+      const domainToCheck = parts.slice(i).join('.');
+      const foundIndex = disabledDomains.indexOf(domainToCheck);
+      if (foundIndex > -1) {
+        index = foundIndex;
+        foundDomain = domainToCheck;
+        break;
+      }
+    }
 
-  console.warn('=== BACKGROUND: New enabled state:', newEnabledState);
-  console.warn('Disabled tabs:', Array.from(disabledTabs));
+    let newEnabledState: boolean;
 
-  // Notify content script
-  await browser.tabs
-    .sendMessage(tabId, {
+    if (index > -1) {
+      // Enable: remove the found domain (could be hostname or parent) from disabled list
+      disabledDomains.splice(index, 1);
+      newEnabledState = true;
+      console.warn('=== BACKGROUND: Enabling domain:', foundDomain);
+    } else {
+      // Disable: add the exact hostname to disabled list
+      disabledDomains.push(hostname);
+      newEnabledState = false;
+      console.warn('=== BACKGROUND: Disabling domain:', hostname);
+    }
+
+    storageData.disabledDomains = disabledDomains;
+    await safeStorageSet({ [STORAGE_KEY]: storageData });
+
+    console.warn('=== BACKGROUND: toggleSiteEnabled called ===');
+    console.warn('Hostname:', hostname);
+    console.warn('New enabled state (for exact domain):', newEnabledState);
+
+    // Notify all tabs that their enabled state might have changed
+    const tabs = await browser.tabs.query({});
+    for (const t of tabs) {
+      if (t.id && t.url) {
+        const isNowDisabled = isUrlDisabled(t.url, disabledDomains);
+        const isNowEnabled = !isNowDisabled;
+
+        await browser.tabs
+          .sendMessage(t.id, {
+            type: 'SITE_ENABLED_CHANGED',
+            enabled: isNowEnabled,
+          })
+          .catch(() => {
+            // Content script might not be ready
+          });
+      }
+    }
+
+    // Update context menu for the current tab
+    const isCurrentlyDisabled = isUrlDisabled(tab.url, disabledDomains);
+    await updateContextMenu(isCurrentlyDisabled);
+
+    console.warn('=== BACKGROUND: Notifying sidebar ===');
+    // Notify sidebar
+    notifySidebar({
       type: 'SITE_ENABLED_CHANGED',
-      enabled: newEnabledState,
-    })
-    .catch(() => {
-      // Content script might not be ready, ignore
+      data: { enabled: !isCurrentlyDisabled },
     });
-
-  console.warn('=== BACKGROUND: Notifying sidebar ===');
-  // Notify sidebar
-  notifySidebar({
-    type: 'SITE_ENABLED_CHANGED',
-    data: { enabled: newEnabledState },
-  });
+  } catch (error) {
+    console.error('Error toggling site enabled:', error);
+  }
 }
 
 // Update context menu title based on state
@@ -150,11 +237,28 @@ browser.runtime.onMessage.addListener(
         }
         return Promise.resolve({ success: true });
       case 'CHECK_SITE_ENABLED':
-        if ('tabId' in message.data) {
-          const enabled = !disabledTabs.has(message.data.tabId);
-          return Promise.resolve({ success: true, data: { enabled } });
-        }
-        return Promise.resolve({ success: false, error: 'No tabId provided' });
+        return (async () => {
+          try {
+            // Use tabId from message or from sender
+            const tabId =
+              message.data && 'tabId' in message.data && message.data.tabId !== -1
+                ? message.data.tabId
+                : sender.tab?.id;
+
+            if (!tabId) {
+              return { success: false, error: 'No tabId found' };
+            }
+
+            const tab = await browser.tabs.get(tabId);
+            if (!tab.url) return { success: true, data: { enabled: true } };
+
+            const storageData = await getStorageData();
+            const enabled = !isUrlDisabled(tab.url, storageData.disabledDomains || []);
+            return { success: true, data: { enabled } };
+          } catch {
+            return { success: true, data: { enabled: true } };
+          }
+        })();
       default:
         return Promise.resolve({ success: false, error: 'Unknown message type' });
     }
