@@ -18,9 +18,10 @@ function init() {
   document.addEventListener('click', handleClick);
 
   // Listen for enable/disable messages from background
-  browser.runtime.onMessage.addListener((message: any) => {
-    if (message.type === 'SITE_ENABLED_CHANGED') {
-      isEnabled = message.enabled ?? true;
+  browser.runtime.onMessage.addListener((message: unknown) => {
+    const msg = message as { type: string; enabled?: boolean; data?: { enabled: boolean } };
+    if (msg.type === 'SITE_ENABLED_CHANGED') {
+      isEnabled = msg.enabled ?? msg.data?.enabled ?? true;
       updateDisabledState();
     }
   });
@@ -31,7 +32,13 @@ function init() {
 
 async function checkSiteEnabled() {
   try {
-    const response = await browser.runtime.sendMessage({ type: 'CHECK_SITE_ENABLED', data: {} });
+    const response = (await browser.runtime.sendMessage({
+      type: 'CHECK_SITE_ENABLED',
+      data: {},
+    })) as {
+      success: boolean;
+      data?: { enabled: boolean };
+    };
     if (response.success && response.data) {
       isEnabled = response.data.enabled;
       updateDisabledState();
@@ -73,7 +80,9 @@ function handleMouseDown(event: MouseEvent) {
   // Handle screenshot mode with Shift+Click
   if (event.shiftKey && !target.closest('.screenshot-overlay')) {
     event.preventDefault();
-    startScreenshotMode(event.clientX, event.clientY, captureScreenshotArea);
+    startScreenshotMode(event.clientX, event.clientY, (rect) => {
+      void captureScreenshotArea(rect);
+    });
   }
 }
 
@@ -85,7 +94,7 @@ function handleClick(event: MouseEvent) {
 
   // Handle image clicks with Ctrl+Shift+Click
   if ((event.ctrlKey || event.metaKey) && event.shiftKey) {
-    const img = findBestImage(target as HTMLImageElement);
+    const img = findBestImage(target);
     if (img?.src) {
       event.preventDefault();
       event.stopPropagation();
@@ -98,7 +107,7 @@ function handleClick(event: MouseEvent) {
   const link = target.closest('a');
   if (link && link.href && (event.ctrlKey || event.metaKey)) {
     event.preventDefault();
-    void captureLink(link as HTMLAnchorElement);
+    void captureLink(link);
     return;
   }
 
@@ -128,12 +137,12 @@ async function captureImage(img: HTMLImageElement) {
   const alt = img.alt || img.title || 'Captured image';
 
   try {
-    const response = await browser.runtime.sendMessage({
+    const response = (await browser.runtime.sendMessage({
       type: 'FETCH_IMAGE',
       data: { url: src },
-    });
+    })) as { success: boolean; data?: { dataUrl: string } };
 
-    if (response.success && response.data.dataUrl) {
+    if (response.success && response.data?.dataUrl) {
       await browser.runtime.sendMessage({
         type: 'CAPTURE_IMAGE',
         data: {
@@ -142,8 +151,8 @@ async function captureImage(img: HTMLImageElement) {
           dataUrl: response.data.dataUrl,
         },
       });
-      // Also send screenshot info if we want to store dimensions, 
-      // but original code used CAPTURE_IMAGE or CAPTURE_SCREENSHOT interchangeably? 
+      // Also send screenshot info if we want to store dimensions,
+      // but original code used CAPTURE_IMAGE or CAPTURE_SCREENSHOT interchangeably?
       // Let's check original background.ts.
       showCaptureConfirmation(img);
     }
@@ -164,15 +173,20 @@ async function captureText(text: string) {
   }
 }
 
-async function captureScreenshotArea(rect: any) {
+async function captureScreenshotArea(rect: {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}) {
   try {
-    const response = await browser.runtime.sendMessage({
+    const response = (await browser.runtime.sendMessage({
       type: 'REQUEST_SCREENSHOT',
       data: {
         dimensions: rect,
         pixelRatio: window.devicePixelRatio,
       },
-    });
+    })) as { success: boolean; data: { dataUrl: string } };
 
     if (response.success && response.data.dataUrl) {
       // ratio/scaling is now handled internally by cropScreenshot using actual image dimensions
