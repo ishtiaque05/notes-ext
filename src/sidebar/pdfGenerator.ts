@@ -20,18 +20,35 @@ declare const pdfMake: PdfMake;
 export async function generatePdf(items: CapturedItem[]) {
     if (items.length === 0) return;
 
-    const docDefinition = createDocDefinition(items);
+    // Determine the title: use the most recent item's source URL if available, or a default
+    let title = 'Captured Notes';
+    const sortedItems = [...items].sort((a, b) => b.timestamp - a.timestamp);
+
+    for (const item of sortedItems) {
+        const sourceUrl = (item.metadata as any).sourceUrl || (item.metadata as any).href || (item.metadata as any).originalSrc;
+        if (sourceUrl) {
+            try {
+                title = new URL(sourceUrl).hostname;
+                break;
+            } catch {
+                title = sourceUrl;
+                break;
+            }
+        }
+    }
+
+    const docDefinition = createDocDefinition(items, title);
     pdfMake.createPdf(docDefinition).download('captured-notes.pdf');
 }
 
 /**
  * Creates the document definition for pdfMake
  */
-function createDocDefinition(items: CapturedItem[]): any {
+function createDocDefinition(items: CapturedItem[], title: string): any {
     const content: any[] = [];
 
     // Title
-    content.push({ text: 'Captured Notes', style: 'title' });
+    content.push({ text: title, style: 'title' });
     content.push({
         text: `Generated on ${new Date().toLocaleString()}`,
         style: 'subtitle',
