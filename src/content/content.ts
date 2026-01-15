@@ -602,10 +602,12 @@ async function captureScreenshot(x: number, y: number, width: number, height: nu
     document.body.appendChild(notification);
 
     // Request background script to capture screenshot
+    // Note: captureVisibleTab captures only the visible viewport, so we use viewport coordinates (no scroll offset)
     const response = await browser.runtime.sendMessage({
       type: 'REQUEST_SCREENSHOT',
       data: {
-        dimensions: { width, height, x: x + window.scrollX, y: y + window.scrollY },
+        dimensions: { width, height, x, y },
+        pixelRatio: window.devicePixelRatio || 1,
       },
     });
 

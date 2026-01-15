@@ -117,7 +117,7 @@ async function updateContextMenu(isDisabled: boolean) {
 }
 
 // Handle messages from content script and sidebar
-browser.runtime.onMessage.addListener((message: Message): Promise<MessageResponse> | void => {
+browser.runtime.onMessage.addListener((message: Message, sender: any): Promise<MessageResponse> | void => {
   if (process.env.NODE_ENV === 'development') {
     console.warn('Background received message:', message);
   }
@@ -132,7 +132,7 @@ browser.runtime.onMessage.addListener((message: Message): Promise<MessageRespons
     case 'CAPTURE_TEXT':
       return handleCaptureText(message.data);
     case 'REQUEST_SCREENSHOT':
-      return handleRequestScreenshot(message.data);
+      return handleRequestScreenshot(message.data, sender);
     case 'CAPTURE_SCREENSHOT':
       return handleCaptureScreenshot(message.data);
     case 'GET_ITEMS':
@@ -414,29 +414,75 @@ async function cropScreenshot(
 }
 
 // Handler for requesting screenshot from content script
-async function handleRequestScreenshot(data: {
-  dimensions: { width: number; height: number; x: number; y: number };
-}): Promise<MessageResponse> {
+async function handleRequestScreenshot(
+  data: {
+    dimensions: { width: number; height: number; x: number; y: number };
+    pixelRatio?: number;
+  },
+  sender: any
+): Promise<MessageResponse> {
   try {
-    // Get active tab
-    const tabs = await browser.tabs.query({ active: true, currentWindow: true });
-    if (!tabs[0]?.id) {
-      return { success: false, error: 'No active tab found' };
+    const tab = sender.tab;
+    if (!tab) {
+      return { success: false, error: 'No tab found in message sender' };
     }
 
-    const tab = tabs[0];
+    if (tab.windowId === undefined) {
+      return { success: false, error: 'No window ID found for sender tab' };
+    }
 
-    // Capture visible tab using browser's native API
-    const dataUrl = await browser.tabs.captureVisibleTab({ format: 'png' });
+    // Capture screenshot: try captureTab (Firefox) first, then captureVisibleTab
+    let dataUrl: string;
+
+    // Check if captureTab is available (Firefox specific, often more reliable for permissions)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const tabsApi = browser.tabs as any;
+
+    // Helper to try standard capture with fallbacks
+    const tryStandardCapture = async () => {
+      try {
+        // First try with explicit windowId
+        return await browser.tabs.captureVisibleTab(tab.windowId, { format: 'png' });
+      } catch (err1) {
+        console.warn('captureVisibleTab(windowId) failed:', err1);
+        try {
+          // Fallback to active tab in current window
+          return await browser.tabs.captureVisibleTab({ format: 'png' });
+        } catch (err2) {
+          console.warn('captureVisibleTab() failed:', err2);
+          throw err1; // Throw the original error or the new one
+        }
+      }
+    };
+
+    if (typeof tabsApi.captureTab === 'function' && tab.id) {
+      try {
+        dataUrl = await tabsApi.captureTab(tab.id, { format: 'png' });
+      } catch (e) {
+        console.warn('captureTab failed, falling back to captureVisibleTab:', e);
+        dataUrl = await tryStandardCapture();
+      }
+    } else {
+      dataUrl = await tryStandardCapture();
+    }
 
     // Crop the screenshot to the selected area
-    const croppedDataUrl = await cropScreenshot(dataUrl, data.dimensions);
+    // Scale coordinates by pixel ratio for the actual image crop
+    const pixelRatio = data.pixelRatio || 1;
+    const scaledDimensions = {
+      x: Math.round(data.dimensions.x * pixelRatio),
+      y: Math.round(data.dimensions.y * pixelRatio),
+      width: Math.round(data.dimensions.width * pixelRatio),
+      height: Math.round(data.dimensions.height * pixelRatio),
+    };
+
+    const croppedDataUrl = await cropScreenshot(dataUrl, scaledDimensions);
 
     // Store the cropped screenshot
     await handleCaptureScreenshot({
       dataUrl: croppedDataUrl,
       sourceUrl: tab.url || window.location.href,
-      dimensions: data.dimensions,
+      dimensions: data.dimensions, // Store original CSS dimensions
     });
 
     return { success: true };
