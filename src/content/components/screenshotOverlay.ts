@@ -11,7 +11,11 @@ let isDrawing = false;
 /**
  * Starts screenshot mode
  */
-export function startScreenshotMode(clientX: number, clientY: number, onCapture: (dims: any) => void) {
+export function startScreenshotMode(
+    clientX: number,
+    clientY: number,
+    onCapture: (dims: { x: number; y: number; width: number; height: number }) => void
+) {
     if (overlay) return;
 
     overlay = document.createElement('div');

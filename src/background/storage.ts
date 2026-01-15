@@ -27,7 +27,7 @@ export async function saveStorageData(data: StorageData): Promise<void> {
  * Notifies the sidebar of changes
  * @param message The message to send to the sidebar
  */
-export function notifySidebar(message: { type: string; data?: any;[key: string]: any }) {
+export function notifySidebar(message: { type: string; data?: unknown;[key: string]: unknown }) {
     browser.runtime.sendMessage(message).catch(() => {
         // Sidebar might not be open, ignore errors
     });
@@ -38,7 +38,7 @@ export function notifySidebar(message: { type: string; data?: any;[key: string]:
  * @param tabId The ID of the tab to notify
  * @param message The message to send
  */
-export function notifyTab(tabId: number, message: { type: string; data?: any;[key: string]: any }) {
+export function notifyTab(tabId: number, message: { type: string; data?: unknown;[key: string]: unknown }) {
     browser.tabs.sendMessage(tabId, message).catch(() => {
         // Tab might be closed or content script not loaded
     });

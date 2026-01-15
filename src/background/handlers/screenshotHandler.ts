@@ -9,7 +9,7 @@ import { checkStorageAvailable, getStorageWarning } from '../../utils/storage';
  * Handler for requested screenshots (interactive mode)
  */
 export async function handleRequestScreenshot(
-    _data: any,
+    _data: unknown,
     sender: browser.runtime.MessageSender
 ): Promise<MessageResponse<{ dataUrl: string }>> {
     try {
