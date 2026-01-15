@@ -260,7 +260,8 @@ function updateUI() {
     if (linkCount > 0) parts.push(`${linkCount} link${linkCount !== 1 ? 's' : ''}`);
     if (imageCount > 0) parts.push(`${imageCount} image${imageCount !== 1 ? 's' : ''}`);
     if (textCount > 0) parts.push(`${textCount} text${textCount !== 1 ? 's' : ''}`);
-    if (screenshotCount > 0) parts.push(`${screenshotCount} screenshot${screenshotCount !== 1 ? 's' : ''}`);
+    if (screenshotCount > 0)
+      parts.push(`${screenshotCount} screenshot${screenshotCount !== 1 ? 's' : ''}`);
 
     subtitle.textContent = `${count} item${count !== 1 ? 's' : ''} (${parts.join(', ')})`;
   }
