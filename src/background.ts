@@ -117,47 +117,49 @@ async function updateContextMenu(isDisabled: boolean) {
 }
 
 // Handle messages from content script and sidebar
-browser.runtime.onMessage.addListener((message: Message, sender: any): Promise<MessageResponse> | void => {
-  if (process.env.NODE_ENV === 'development') {
-    console.warn('Background received message:', message);
-  }
+browser.runtime.onMessage.addListener(
+  (message: Message, sender: browser.runtime.MessageSender): Promise<MessageResponse> | void => {
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('Background received message:', message);
+    }
 
-  switch (message.type) {
-    case 'FETCH_IMAGE':
-      return handleFetchImage(message.data.url);
-    case 'CAPTURE_LINK':
-      return handleCaptureLink(message.data);
-    case 'CAPTURE_IMAGE':
-      return handleCaptureImage(message.data);
-    case 'CAPTURE_TEXT':
-      return handleCaptureText(message.data);
-    case 'REQUEST_SCREENSHOT':
-      return handleRequestScreenshot(message.data, sender);
-    case 'CAPTURE_SCREENSHOT':
-      return handleCaptureScreenshot(message.data);
-    case 'GET_ITEMS':
-      return handleGetItems();
-    case 'DELETE_ITEM':
-      return handleDeleteItem(message.data.id);
-    case 'REORDER_ITEMS':
-      return handleReorderItems(message.data.items);
-    case 'CLEAR_ALL':
-      return handleClearAll();
-    case 'TOGGLE_SITE_ENABLED':
-      if ('tabId' in message.data) {
-        void toggleSiteEnabled(message.data.tabId);
-      }
-      return Promise.resolve({ success: true });
-    case 'CHECK_SITE_ENABLED':
-      if ('tabId' in message.data) {
-        const enabled = !disabledTabs.has(message.data.tabId);
-        return Promise.resolve({ success: true, data: { enabled } });
-      }
-      return Promise.resolve({ success: false, error: 'No tabId provided' });
-    default:
-      return Promise.resolve({ success: false, error: 'Unknown message type' });
+    switch (message.type) {
+      case 'FETCH_IMAGE':
+        return handleFetchImage(message.data.url);
+      case 'CAPTURE_LINK':
+        return handleCaptureLink(message.data);
+      case 'CAPTURE_IMAGE':
+        return handleCaptureImage(message.data);
+      case 'CAPTURE_TEXT':
+        return handleCaptureText(message.data);
+      case 'REQUEST_SCREENSHOT':
+        return handleRequestScreenshot(message.data, sender);
+      case 'CAPTURE_SCREENSHOT':
+        return handleCaptureScreenshot(message.data);
+      case 'GET_ITEMS':
+        return handleGetItems();
+      case 'DELETE_ITEM':
+        return handleDeleteItem(message.data.id);
+      case 'REORDER_ITEMS':
+        return handleReorderItems(message.data.items);
+      case 'CLEAR_ALL':
+        return handleClearAll();
+      case 'TOGGLE_SITE_ENABLED':
+        if ('tabId' in message.data) {
+          void toggleSiteEnabled(message.data.tabId);
+        }
+        return Promise.resolve({ success: true });
+      case 'CHECK_SITE_ENABLED':
+        if ('tabId' in message.data) {
+          const enabled = !disabledTabs.has(message.data.tabId);
+          return Promise.resolve({ success: true, data: { enabled } });
+        }
+        return Promise.resolve({ success: false, error: 'No tabId provided' });
+      default:
+        return Promise.resolve({ success: false, error: 'Unknown message type' });
+    }
   }
-});
+);
 
 // Handler for fetching images (bypasses CSP restrictions)
 async function handleFetchImage(url: string): Promise<MessageResponse<{ dataUrl: string }>> {
@@ -419,7 +421,7 @@ async function handleRequestScreenshot(
     dimensions: { width: number; height: number; x: number; y: number };
     pixelRatio?: number;
   },
-  sender: any
+  sender: browser.runtime.MessageSender
 ): Promise<MessageResponse> {
   try {
     const tab = sender.tab;
@@ -436,13 +438,15 @@ async function handleRequestScreenshot(
 
     // Check if captureTab is available (Firefox specific, often more reliable for permissions)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const tabsApi = browser.tabs as any;
+    const tabsApi = browser.tabs as unknown as {
+      captureTab?: (tabId: number, options?: { format?: string }) => Promise<string>;
+    };
 
     // Helper to try standard capture with fallbacks
     const tryStandardCapture = async () => {
       try {
         // First try with explicit windowId
-        return await browser.tabs.captureVisibleTab(tab.windowId, { format: 'png' });
+        return await browser.tabs.captureVisibleTab(tab.windowId!, { format: 'png' });
       } catch (err1) {
         console.warn('captureVisibleTab(windowId) failed:', err1);
         try {

@@ -1,5 +1,6 @@
 // Content script for Notes Collector extension
 import './content.scss';
+import type { MessageResponse } from '../types';
 
 const HIGHLIGHT_CLASS = 'notes-collector-highlight';
 
@@ -603,13 +604,13 @@ async function captureScreenshot(x: number, y: number, width: number, height: nu
 
     // Request background script to capture screenshot
     // Note: captureVisibleTab captures only the visible viewport, so we use viewport coordinates (no scroll offset)
-    const response = await browser.runtime.sendMessage({
+    const response = (await browser.runtime.sendMessage({
       type: 'REQUEST_SCREENSHOT',
       data: {
         dimensions: { width, height, x, y },
         pixelRatio: window.devicePixelRatio || 1,
       },
-    });
+    })) as MessageResponse;
 
     if (response && response.success) {
       // Update notification to success
