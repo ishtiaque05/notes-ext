@@ -95,6 +95,12 @@ browser.tabs.onActivated.addListener((activeInfo) => {
         const storageData = await getStorageData();
         const isDisabled = isUrlDisabled(tab.url, storageData.disabledDomains || []);
         void updateContextMenu(isDisabled);
+
+        // Also notify sidebar of the enabled state for the new current tab
+        notifySidebar({
+          type: 'SITE_ENABLED_CHANGED',
+          data: { enabled: !isDisabled },
+        });
       }
     } catch {
       // Tab might be closed or not have a URL
@@ -110,6 +116,16 @@ browser.tabs.onUpdated.addListener(
         const storageData = await getStorageData();
         const isDisabled = isUrlDisabled(tab.url || '', storageData.disabledDomains || []);
         void updateContextMenu(isDisabled);
+
+        // Also notify sidebar of the enabled state for the updated tab
+        // Note: Sidebar only cares if this is the active tab
+        const activeTabs = await browser.tabs.query({ active: true, currentWindow: true });
+        if (activeTabs[0]?.id === _tabId) {
+          notifySidebar({
+            type: 'SITE_ENABLED_CHANGED',
+            data: { enabled: !isDisabled },
+          });
+        }
       }
     })();
   }
@@ -233,9 +249,12 @@ browser.runtime.onMessage.addListener(
         return handleClearAll();
       case 'TOGGLE_SITE_ENABLED':
         if ('tabId' in message.data) {
-          void toggleSiteEnabled(message.data.tabId);
+          return (async () => {
+            await toggleSiteEnabled(message.data.tabId);
+            return { success: true };
+          })();
         }
-        return Promise.resolve({ success: true });
+        return Promise.resolve({ success: false, error: 'No tabId provided' });
       case 'CHECK_SITE_ENABLED':
         return (async () => {
           try {

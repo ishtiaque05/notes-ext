@@ -18,7 +18,6 @@ declare const pdfMake: PdfMake;
 
 let capturedItems: CapturedItem[] = [];
 let isExtensionEnabled = true;
-let currentTabId: number | null = null;
 
 // DOM elements
 let itemsContainer: HTMLElement;
@@ -44,12 +43,6 @@ document.addEventListener('DOMContentLoaded', () => {
     clearAllBtn = document.getElementById('clear-all-btn') as HTMLButtonElement;
     toggleEnabledBtn = document.getElementById('toggle-enabled-btn') as HTMLButtonElement;
     subtitle = document.querySelector('.subtitle')!;
-
-    // Get current tab ID
-    const tabs = await browser.tabs.query({ active: true, currentWindow: true });
-    if (tabs[0]?.id) {
-      currentTabId = tabs[0].id;
-    }
 
     // Load items from storage
     await loadItems();
@@ -91,16 +84,27 @@ async function loadItems() {
   }
 }
 
+// Helper to get current active tab ID
+async function getActiveTabId(): Promise<number | null> {
+  try {
+    const tabs = await browser.tabs.query({ active: true, currentWindow: true });
+    return tabs[0]?.id || null;
+  } catch {
+    return null;
+  }
+}
+
 // Check if extension is enabled for current tab
 async function checkEnabledState() {
-  if (!currentTabId) {
+  const tabId = await getActiveTabId();
+  if (!tabId) {
     return;
   }
 
   try {
     const response = (await browser.runtime.sendMessage({
       type: 'CHECK_SITE_ENABLED',
-      data: { tabId: currentTabId },
+      data: { tabId },
     })) as {
       success: boolean;
       data?: { enabled: boolean };
@@ -636,19 +640,21 @@ function buildPdfDocument() {
 async function handleToggleEnabled() {
   console.warn('=== BUTTON CLICKED ===');
 
-  if (!currentTabId) {
+  const tabId = await getActiveTabId();
+  if (!tabId) {
     alert('Could not determine current tab');
     return;
   }
 
-  console.warn('Current tab ID:', currentTabId);
+  console.warn('Current tab ID:', tabId);
   console.warn('Current enabled state BEFORE:', isExtensionEnabled);
 
   try {
     // Send message to background to toggle state
+    // Background now awaits the full toggle before responding
     const response = (await browser.runtime.sendMessage({
       type: 'TOGGLE_SITE_ENABLED',
-      data: { tabId: currentTabId },
+      data: { tabId },
     })) as { success: boolean };
 
     console.warn('Toggle response:', response);
