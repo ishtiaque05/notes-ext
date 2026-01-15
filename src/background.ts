@@ -7,6 +7,7 @@ import type {
   LinkMetadata,
   ImageMetadata,
   TextMetadata,
+  ScreenshotMetadata,
 } from './types';
 import { NotesCollectorError } from './types/errors';
 import { checkStorageAvailable, safeStorageSet, getStorageWarning } from './utils/storage';
@@ -116,45 +117,49 @@ async function updateContextMenu(isDisabled: boolean) {
 }
 
 // Handle messages from content script and sidebar
-browser.runtime.onMessage.addListener((message: Message): Promise<MessageResponse> | void => {
-  if (process.env.NODE_ENV === 'development') {
-    console.warn('Background received message:', message);
-  }
+browser.runtime.onMessage.addListener(
+  (message: Message, sender: browser.runtime.MessageSender): Promise<MessageResponse> | void => {
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('Background received message:', message);
+    }
 
-  switch (message.type) {
-    case 'FETCH_IMAGE':
-      return handleFetchImage(message.data.url);
-    case 'CAPTURE_SCREENSHOT':
-      return handleCaptureScreenshot(message.data);
-    case 'CAPTURE_LINK':
-      return handleCaptureLink(message.data);
-    case 'CAPTURE_IMAGE':
-      return handleCaptureImage(message.data);
-    case 'CAPTURE_TEXT':
-      return handleCaptureText(message.data);
-    case 'GET_ITEMS':
-      return handleGetItems();
-    case 'DELETE_ITEM':
-      return handleDeleteItem(message.data.id);
-    case 'REORDER_ITEMS':
-      return handleReorderItems(message.data.items);
-    case 'CLEAR_ALL':
-      return handleClearAll();
-    case 'TOGGLE_SITE_ENABLED':
-      if ('tabId' in message.data) {
-        void toggleSiteEnabled(message.data.tabId);
-      }
-      return Promise.resolve({ success: true });
-    case 'CHECK_SITE_ENABLED':
-      if ('tabId' in message.data) {
-        const enabled = !disabledTabs.has(message.data.tabId);
-        return Promise.resolve({ success: true, data: { enabled } });
-      }
-      return Promise.resolve({ success: false, error: 'No tabId provided' });
-    default:
-      return Promise.resolve({ success: false, error: 'Unknown message type' });
+    switch (message.type) {
+      case 'FETCH_IMAGE':
+        return handleFetchImage(message.data.url);
+      case 'CAPTURE_LINK':
+        return handleCaptureLink(message.data);
+      case 'CAPTURE_IMAGE':
+        return handleCaptureImage(message.data);
+      case 'CAPTURE_TEXT':
+        return handleCaptureText(message.data);
+      case 'REQUEST_SCREENSHOT':
+        return handleRequestScreenshot(message.data, sender);
+      case 'CAPTURE_SCREENSHOT':
+        return handleCaptureScreenshot(message.data);
+      case 'GET_ITEMS':
+        return handleGetItems();
+      case 'DELETE_ITEM':
+        return handleDeleteItem(message.data.id);
+      case 'REORDER_ITEMS':
+        return handleReorderItems(message.data.items);
+      case 'CLEAR_ALL':
+        return handleClearAll();
+      case 'TOGGLE_SITE_ENABLED':
+        if ('tabId' in message.data) {
+          void toggleSiteEnabled(message.data.tabId);
+        }
+        return Promise.resolve({ success: true });
+      case 'CHECK_SITE_ENABLED':
+        if ('tabId' in message.data) {
+          const enabled = !disabledTabs.has(message.data.tabId);
+          return Promise.resolve({ success: true, data: { enabled } });
+        }
+        return Promise.resolve({ success: false, error: 'No tabId provided' });
+      default:
+        return Promise.resolve({ success: false, error: 'Unknown message type' });
+    }
   }
-});
+);
 
 // Handler for fetching images (bypasses CSP restrictions)
 async function handleFetchImage(url: string): Promise<MessageResponse<{ dataUrl: string }>> {
@@ -197,125 +202,6 @@ async function handleFetchImage(url: string): Promise<MessageResponse<{ dataUrl:
     console.error('Background: Error fetching image:', error);
     return { success: false, error: String(error) };
   }
-}
-
-// Handler for capturing screenshots of images
-async function handleCaptureScreenshot(data: {
-  rect: { x: number; y: number; width: number; height: number };
-  alt: string;
-  originalSrc: string;
-}): Promise<MessageResponse<CapturedItem>> {
-  try {
-    if (process.env.NODE_ENV === 'development') {
-      console.warn('Background: Capturing screenshot at', data.rect);
-    }
-
-    // Get the current active tab
-    const tabs = await browser.tabs.query({ active: true, currentWindow: true });
-    const activeTab = tabs[0];
-
-    if (!activeTab?.id || activeTab.windowId === undefined) {
-      throw new Error('No active tab found');
-    }
-
-    // Capture visible tab as data URL
-    const screenshotDataUrl = await browser.tabs.captureVisibleTab(activeTab.windowId, {
-      format: 'png',
-    });
-
-    if (process.env.NODE_ENV === 'development') {
-      console.warn('Background: Screenshot captured, data URL length:', screenshotDataUrl.length);
-    }
-
-    // Create an image to crop the screenshot
-    const croppedDataUrl = await cropImage(screenshotDataUrl, data.rect);
-
-    if (process.env.NODE_ENV === 'development') {
-      console.warn('Background: Image cropped, data URL length:', croppedDataUrl.length);
-    }
-
-    // Check storage availability
-    await checkStorageAvailable(croppedDataUrl.length);
-
-    const storageData = await getStorageData();
-
-    const newItem: CapturedItem = {
-      id: crypto.randomUUID(),
-      type: 'image',
-      order: storageData.nextOrder,
-      timestamp: Date.now(),
-      content: croppedDataUrl,
-      metadata: {
-        alt: data.alt,
-        originalSrc: data.originalSrc,
-      } as ImageMetadata,
-    };
-
-    storageData.items.push(newItem);
-    storageData.nextOrder++;
-
-    await safeStorageSet({ [STORAGE_KEY]: storageData });
-
-    // Notify sidebar of new item
-    notifySidebar({ type: 'ITEM_ADDED', data: newItem });
-
-    // Check if approaching limits and send warning
-    const warning = await getStorageWarning();
-    if (warning) {
-      notifySidebar({ type: 'STORAGE_WARNING', data: { message: warning } });
-    }
-
-    return { success: true, data: newItem };
-  } catch (error) {
-    console.error('Error capturing screenshot:', error);
-
-    if (error instanceof NotesCollectorError) {
-      return { success: false, error: error.userMessage || error.message };
-    }
-
-    return { success: false, error: 'Failed to capture screenshot. Please try again.' };
-  }
-}
-
-// Helper function to crop an image
-async function cropImage(
-  dataUrl: string,
-  rect: { x: number; y: number; width: number; height: number }
-): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => {
-      const canvas = new OffscreenCanvas(rect.width, rect.height);
-      const ctx = canvas.getContext('2d');
-
-      if (!ctx) {
-        reject(new Error('Could not get canvas context'));
-        return;
-      }
-
-      // Draw the cropped portion
-      ctx.drawImage(img, rect.x, rect.y, rect.width, rect.height, 0, 0, rect.width, rect.height);
-
-      // Convert to blob and then to data URL
-      canvas
-        .convertToBlob({ type: 'image/png' })
-        .then((blob) => {
-          const reader = new FileReader();
-          reader.onloadend = () => {
-            if (typeof reader.result === 'string') {
-              resolve(reader.result);
-            } else {
-              reject(new Error('Failed to convert blob to data URL'));
-            }
-          };
-          reader.onerror = () => reject(new Error('FileReader error'));
-          reader.readAsDataURL(blob);
-        })
-        .catch(reject);
-    };
-    img.onerror = () => reject(new Error('Failed to load screenshot image'));
-    img.src = dataUrl;
-  });
 }
 
 // Handler for capturing links
@@ -468,6 +354,197 @@ async function handleCaptureText(data: {
     }
 
     return { success: false, error: 'Failed to capture text. Please try again.' };
+  }
+}
+
+// Helper function to crop a screenshot to the selected area
+async function cropScreenshot(
+  dataUrl: string,
+  dimensions: { width: number; height: number; x: number; y: number }
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      try {
+        // Create canvas with the cropped dimensions
+        const canvas = new OffscreenCanvas(dimensions.width, dimensions.height);
+        const ctx = canvas.getContext('2d');
+
+        if (!ctx) {
+          reject(new Error('Could not get canvas context'));
+          return;
+        }
+
+        // Draw the cropped portion of the screenshot
+        // Source: (x, y, width, height) from the original image
+        // Destination: (0, 0, width, height) on the canvas
+        ctx.drawImage(
+          img,
+          dimensions.x,
+          dimensions.y,
+          dimensions.width,
+          dimensions.height,
+          0,
+          0,
+          dimensions.width,
+          dimensions.height
+        );
+
+        // Convert canvas to blob and then to data URL
+        canvas
+          .convertToBlob({ type: 'image/png' })
+          .then((blob) => {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+              if (typeof reader.result === 'string') {
+                resolve(reader.result);
+              } else {
+                reject(new Error('Failed to convert blob to data URL'));
+              }
+            };
+            reader.onerror = () => reject(new Error('FileReader error'));
+            reader.readAsDataURL(blob);
+          })
+          .catch(reject);
+      } catch (err) {
+        reject(new Error(`Canvas cropping failed: ${String(err)}`));
+      }
+    };
+    img.onerror = () => reject(new Error('Failed to load screenshot image'));
+    img.src = dataUrl;
+  });
+}
+
+// Handler for requesting screenshot from content script
+async function handleRequestScreenshot(
+  data: {
+    dimensions: { width: number; height: number; x: number; y: number };
+    pixelRatio?: number;
+  },
+  sender: browser.runtime.MessageSender
+): Promise<MessageResponse> {
+  try {
+    const tab = sender.tab;
+    if (!tab) {
+      return { success: false, error: 'No tab found in message sender' };
+    }
+
+    if (tab.windowId === undefined) {
+      return { success: false, error: 'No window ID found for sender tab' };
+    }
+
+    // Capture screenshot: try captureTab (Firefox) first, then captureVisibleTab
+    let dataUrl: string;
+
+    // Check if captureTab is available (Firefox specific, often more reliable for permissions)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const tabsApi = browser.tabs as unknown as {
+      captureTab?: (tabId: number, options?: { format?: string }) => Promise<string>;
+    };
+
+    // Helper to try standard capture with fallbacks
+    const tryStandardCapture = async () => {
+      try {
+        // First try with explicit windowId
+        return await browser.tabs.captureVisibleTab(tab.windowId!, { format: 'png' });
+      } catch (err1) {
+        console.warn('captureVisibleTab(windowId) failed:', err1);
+        try {
+          // Fallback to active tab in current window
+          return await browser.tabs.captureVisibleTab({ format: 'png' });
+        } catch (err2) {
+          console.warn('captureVisibleTab() failed:', err2);
+          throw err1; // Throw the original error or the new one
+        }
+      }
+    };
+
+    if (typeof tabsApi.captureTab === 'function' && tab.id) {
+      try {
+        dataUrl = await tabsApi.captureTab(tab.id, { format: 'png' });
+      } catch (e) {
+        console.warn('captureTab failed, falling back to captureVisibleTab:', e);
+        dataUrl = await tryStandardCapture();
+      }
+    } else {
+      dataUrl = await tryStandardCapture();
+    }
+
+    // Crop the screenshot to the selected area
+    // Scale coordinates by pixel ratio for the actual image crop
+    const pixelRatio = data.pixelRatio || 1;
+    const scaledDimensions = {
+      x: Math.round(data.dimensions.x * pixelRatio),
+      y: Math.round(data.dimensions.y * pixelRatio),
+      width: Math.round(data.dimensions.width * pixelRatio),
+      height: Math.round(data.dimensions.height * pixelRatio),
+    };
+
+    const croppedDataUrl = await cropScreenshot(dataUrl, scaledDimensions);
+
+    // Store the cropped screenshot
+    await handleCaptureScreenshot({
+      dataUrl: croppedDataUrl,
+      sourceUrl: tab.url || window.location.href,
+      dimensions: data.dimensions, // Store original CSS dimensions
+    });
+
+    return { success: true };
+  } catch (error) {
+    console.error('Error requesting screenshot:', error);
+    return { success: false, error: String(error) };
+  }
+}
+
+// Handler for capturing screenshots
+async function handleCaptureScreenshot(data: {
+  dataUrl: string;
+  sourceUrl: string;
+  dimensions: { width: number; height: number; x: number; y: number };
+}): Promise<MessageResponse<CapturedItem>> {
+  try {
+    // Estimate size (data URLs can be very large for screenshots)
+    const estimatedSize = data.dataUrl.length;
+    await checkStorageAvailable(estimatedSize);
+
+    const storageData = await getStorageData();
+
+    const newItem: CapturedItem = {
+      id: crypto.randomUUID(),
+      type: 'screenshot',
+      order: storageData.nextOrder,
+      timestamp: Date.now(),
+      content: data.dataUrl,
+      metadata: {
+        alt: `Screenshot (${data.dimensions.width}x${data.dimensions.height})`,
+        sourceUrl: data.sourceUrl,
+        dimensions: data.dimensions,
+      } as ScreenshotMetadata,
+    };
+
+    storageData.items.push(newItem);
+    storageData.nextOrder++;
+
+    await safeStorageSet({ [STORAGE_KEY]: storageData });
+
+    // Notify sidebar of new item
+    notifySidebar({ type: 'ITEM_ADDED', data: newItem });
+
+    // Check if approaching limits and send warning
+    const warning = await getStorageWarning();
+    if (warning) {
+      notifySidebar({ type: 'STORAGE_WARNING', data: { message: warning } });
+    }
+
+    return { success: true, data: newItem };
+  } catch (error) {
+    console.error('Error capturing screenshot:', error);
+
+    if (error instanceof NotesCollectorError) {
+      return { success: false, error: error.userMessage || error.message };
+    }
+
+    return { success: false, error: 'Failed to capture screenshot. Please try again.' };
   }
 }
 

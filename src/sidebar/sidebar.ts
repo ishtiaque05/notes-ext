@@ -122,7 +122,7 @@ function renderItems() {
 
   if (capturedItems.length === 0) {
     itemsContainer.innerHTML =
-      '<p class="empty-state">No items captured yet. Click on links/images or Ctrl+Click selected text to capture.</p>';
+      '<p class="empty-state">No items captured yet. Click on links/images, Ctrl+Click selected text, or Shift+Click to capture screenshots.</p>';
     return;
   }
 
@@ -163,7 +163,7 @@ function renderItem(item: CapturedItem): HTMLLIElement {
         <button class="delete-btn" title="Delete" data-id="${item.id}">✕</button>
       </div>
     `;
-  } else if (item.type === 'image' && 'alt' in item.metadata) {
+  } else if (item.type === 'image' && 'alt' in item.metadata && 'originalSrc' in item.metadata) {
     li.innerHTML = `
       <div class="item-content">
         <span class="item-drag-handle" title="Drag to reorder">⋮⋮</span>
@@ -177,7 +177,7 @@ function renderItem(item: CapturedItem): HTMLLIElement {
         <button class="delete-btn" title="Delete" data-id="${item.id}">✕</button>
       </div>
     `;
-  } else if (item.type === 'text' && 'sourceUrl' in item.metadata) {
+  } else if (item.type === 'text' && 'text' in item.metadata && 'sourceUrl' in item.metadata) {
     const truncatedText =
       item.metadata.text.length > 100
         ? item.metadata.text.substring(0, 100) + '...'
@@ -189,6 +189,20 @@ function renderItem(item: CapturedItem): HTMLLIElement {
         <span class="item-icon text-icon">📝</span>
         <div class="item-text">
           <div class="item-title">${escapeHtml(truncatedText)}</div>
+          <div class="item-url">${escapeHtml(item.metadata.sourceUrl)}</div>
+        </div>
+      </div>
+      <div class="item-actions">
+        <button class="delete-btn" title="Delete" data-id="${item.id}">✕</button>
+      </div>
+    `;
+  } else if (item.type === 'screenshot' && 'dimensions' in item.metadata) {
+    li.innerHTML = `
+      <div class="item-content">
+        <span class="item-drag-handle" title="Drag to reorder">⋮⋮</span>
+        <img class="item-thumbnail" src="${escapeHtml(item.content)}" alt="${escapeHtml(item.metadata.alt)}" />
+        <div class="item-text">
+          <div class="item-title">${escapeHtml(item.metadata.alt)}</div>
           <div class="item-url">${escapeHtml(item.metadata.sourceUrl)}</div>
         </div>
       </div>
@@ -237,6 +251,7 @@ function updateUI() {
   const linkCount = capturedItems.filter((item) => item.type === 'link').length;
   const imageCount = capturedItems.filter((item) => item.type === 'image').length;
   const textCount = capturedItems.filter((item) => item.type === 'text').length;
+  const screenshotCount = capturedItems.filter((item) => item.type === 'screenshot').length;
 
   if (count === 0) {
     subtitle.textContent = 'Captured items will appear here';
@@ -245,6 +260,8 @@ function updateUI() {
     if (linkCount > 0) parts.push(`${linkCount} link${linkCount !== 1 ? 's' : ''}`);
     if (imageCount > 0) parts.push(`${imageCount} image${imageCount !== 1 ? 's' : ''}`);
     if (textCount > 0) parts.push(`${textCount} text${textCount !== 1 ? 's' : ''}`);
+    if (screenshotCount > 0)
+      parts.push(`${screenshotCount} screenshot${screenshotCount !== 1 ? 's' : ''}`);
 
     subtitle.textContent = `${count} item${count !== 1 ? 's' : ''} (${parts.join(', ')})`;
   }
@@ -446,7 +463,7 @@ function buildPdfDocument() {
           margin: [10, 0, 0, 0],
         });
       }
-    } else if (item.type === 'image' && 'alt' in item.metadata) {
+    } else if (item.type === 'image' && 'alt' in item.metadata && 'originalSrc' in item.metadata) {
       // Add image - check if data URL is valid
       if (item.content && item.content.startsWith('data:image/')) {
         try {
@@ -497,7 +514,7 @@ function buildPdfDocument() {
           margin: [10, 0, 0, 0],
         });
       }
-    } else if (item.type === 'text' && 'sourceUrl' in item.metadata) {
+    } else if (item.type === 'text' && 'text' in item.metadata && 'sourceUrl' in item.metadata) {
       // Add captured text
       content.push({
         text: item.metadata.text,
@@ -511,6 +528,57 @@ function buildPdfDocument() {
         style: 'url',
         margin: [10, 0, 0, 0],
       });
+    } else if (item.type === 'screenshot' && 'dimensions' in item.metadata) {
+      // Add screenshot - check if data URL is valid
+      if (item.content && item.content.startsWith('data:image/')) {
+        try {
+          content.push({
+            image: item.content, // data URL
+            width: 400,
+            margin: [10, 0, 0, 5],
+          });
+
+          // Add alt text and source URL
+          if (item.metadata.alt) {
+            content.push({
+              text: item.metadata.alt,
+              style: 'imageCaption',
+              margin: [10, 5, 0, 2],
+            });
+          }
+
+          content.push({
+            text: item.metadata.sourceUrl,
+            style: 'url',
+            margin: [10, 0, 0, 0],
+          });
+        } catch (error) {
+          console.error('Error adding screenshot to PDF:', error);
+          // Fallback if screenshot fails to embed
+          content.push({
+            text: `[Screenshot: ${item.metadata.alt || 'No description'}]`,
+            style: 'error',
+            margin: [10, 0, 0, 2],
+          });
+          content.push({
+            text: item.metadata.sourceUrl,
+            style: 'url',
+            margin: [10, 0, 0, 0],
+          });
+        }
+      } else {
+        // Screenshot data not available, show placeholder
+        content.push({
+          text: `[Screenshot: ${item.metadata.alt || 'No description'}]`,
+          style: 'error',
+          margin: [10, 0, 0, 2],
+        });
+        content.push({
+          text: item.metadata.sourceUrl,
+          style: 'url',
+          margin: [10, 0, 0, 0],
+        });
+      }
     }
   });
 

@@ -1,5 +1,6 @@
 // Content script for Notes Collector extension
 import './content.scss';
+import type { MessageResponse } from '../types';
 
 const HIGHLIGHT_CLASS = 'notes-collector-highlight';
 
@@ -11,6 +12,7 @@ function addHoverListeners() {
   // Use event delegation on document for better performance
   document.addEventListener('mouseover', handleMouseOver);
   document.addEventListener('mouseout', handleMouseOut);
+  document.addEventListener('mousedown', handleMouseDown);
   document.addEventListener('click', handleClick);
 }
 
@@ -61,6 +63,19 @@ function handleMouseOut(event: MouseEvent) {
   // Remove highlight from links and images
   if (isCapturableElement(target)) {
     target.classList.remove(HIGHLIGHT_CLASS);
+  }
+}
+
+function handleMouseDown(event: MouseEvent) {
+  if (!isEnabled) return;
+
+  const target = event.target as HTMLElement;
+
+  // Handle screenshot mode with Shift+Click
+  if (event.shiftKey && !target.closest('.screenshot-overlay')) {
+    event.preventDefault();
+    startScreenshotMode(event.clientX, event.clientY);
+    return;
   }
 }
 
@@ -231,6 +246,11 @@ function handleClick(event: MouseEvent) {
   }
 
   const target = event.target as HTMLElement;
+
+  // Ignore clicks during screenshot mode
+  if (isDrawingScreenshot) {
+    return;
+  }
 
   // Check if there's selected text - capture it with Ctrl+Click (or Cmd+Click on Mac)
   const selection = window.getSelection();
@@ -416,6 +436,224 @@ function showTextCaptureConfirmation() {
       document.body.removeChild(notification);
     }, 300);
   }, 2000);
+}
+
+// Screenshot mode state
+let screenshotOverlay: HTMLDivElement | null = null;
+let screenshotBox: HTMLDivElement | null = null;
+let screenshotStartX = 0;
+let screenshotStartY = 0;
+let isDrawingScreenshot = false;
+
+function startScreenshotMode(clientX: number, clientY: number) {
+  if (!isEnabled) return;
+
+  // Create overlay
+  screenshotOverlay = document.createElement('div');
+  screenshotOverlay.className = 'screenshot-overlay';
+  screenshotOverlay.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.3);
+    z-index: 999998;
+    cursor: crosshair;
+  `;
+
+  // Create selection box
+  screenshotBox = document.createElement('div');
+  screenshotBox.className = 'screenshot-box';
+  screenshotBox.style.cssText = `
+    position: fixed;
+    border: 2px dashed #4caf50;
+    background: rgba(76, 175, 80, 0.1);
+    z-index: 999999;
+    pointer-events: none;
+  `;
+
+  document.body.appendChild(screenshotOverlay);
+  document.body.appendChild(screenshotBox);
+
+  // Store starting position
+  screenshotStartX = clientX;
+  screenshotStartY = clientY;
+  isDrawingScreenshot = true;
+
+  // Set initial box position
+  screenshotBox.style.left = `${clientX}px`;
+  screenshotBox.style.top = `${clientY}px`;
+  screenshotBox.style.width = '0px';
+  screenshotBox.style.height = '0px';
+
+  // Add event listeners
+  document.addEventListener('mousemove', handleScreenshotDrag);
+  document.addEventListener('mouseup', handleScreenshotEnd);
+  document.addEventListener('keydown', handleScreenshotKeydown);
+
+  // Prevent default hover highlighting during screenshot mode
+  document.removeEventListener('mouseover', handleMouseOver);
+  document.removeEventListener('mouseout', handleMouseOut);
+}
+
+function handleScreenshotDrag(event: MouseEvent) {
+  if (!isDrawingScreenshot || !screenshotBox) return;
+
+  const currentX = event.clientX;
+  const currentY = event.clientY;
+
+  // Calculate box dimensions
+  const left = Math.min(screenshotStartX, currentX);
+  const top = Math.min(screenshotStartY, currentY);
+  const width = Math.abs(currentX - screenshotStartX);
+  const height = Math.abs(currentY - screenshotStartY);
+
+  // Update box position and size
+  screenshotBox.style.left = `${left}px`;
+  screenshotBox.style.top = `${top}px`;
+  screenshotBox.style.width = `${width}px`;
+  screenshotBox.style.height = `${height}px`;
+}
+
+function handleScreenshotEnd(event: MouseEvent) {
+  if (!isDrawingScreenshot || !screenshotBox || !screenshotOverlay) return;
+
+  event.preventDefault();
+
+  const currentX = event.clientX;
+  const currentY = event.clientY;
+
+  // Calculate final dimensions
+  const left = Math.min(screenshotStartX, currentX);
+  const top = Math.min(screenshotStartY, currentY);
+  const width = Math.abs(currentX - screenshotStartX);
+  const height = Math.abs(currentY - screenshotStartY);
+
+  // Clean up event listeners
+  removeScreenshotListeners();
+
+  // Remove overlay and box
+  cleanupScreenshotMode();
+
+  // Only capture if there's a meaningful selection (at least 10x10 pixels)
+  if (width > 10 && height > 10) {
+    void captureScreenshot(left, top, width, height);
+  }
+
+  // Re-enable hover highlighting
+  document.addEventListener('mouseover', handleMouseOver);
+  document.addEventListener('mouseout', handleMouseOut);
+}
+
+function handleScreenshotKeydown(event: KeyboardEvent) {
+  // Cancel screenshot mode on Escape key
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    cancelScreenshotMode();
+  }
+}
+
+function cancelScreenshotMode() {
+  removeScreenshotListeners();
+  cleanupScreenshotMode();
+
+  // Re-enable hover highlighting
+  document.addEventListener('mouseover', handleMouseOver);
+  document.addEventListener('mouseout', handleMouseOut);
+}
+
+function removeScreenshotListeners() {
+  document.removeEventListener('mousemove', handleScreenshotDrag);
+  document.removeEventListener('mouseup', handleScreenshotEnd);
+  document.removeEventListener('keydown', handleScreenshotKeydown);
+}
+
+function cleanupScreenshotMode() {
+  if (screenshotOverlay && screenshotOverlay.parentNode) {
+    screenshotOverlay.parentNode.removeChild(screenshotOverlay);
+  }
+  if (screenshotBox && screenshotBox.parentNode) {
+    screenshotBox.parentNode.removeChild(screenshotBox);
+  }
+
+  screenshotOverlay = null;
+  screenshotBox = null;
+  isDrawingScreenshot = false;
+}
+
+async function captureScreenshot(x: number, y: number, width: number, height: number) {
+  try {
+    // Show loading notification
+    const notification = document.createElement('div');
+    notification.textContent = 'Capturing screenshot...';
+    notification.style.cssText = `
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: #2196f3;
+      color: white;
+      padding: 12px 20px;
+      border-radius: 4px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+      z-index: 999999;
+      font-family: system-ui, -apple-system, sans-serif;
+      font-size: 14px;
+    `;
+    document.body.appendChild(notification);
+
+    // Request background script to capture screenshot
+    // Note: captureVisibleTab captures only the visible viewport, so we use viewport coordinates (no scroll offset)
+    const response = (await browser.runtime.sendMessage({
+      type: 'REQUEST_SCREENSHOT',
+      data: {
+        dimensions: { width, height, x, y },
+        pixelRatio: window.devicePixelRatio || 1,
+      },
+    })) as MessageResponse;
+
+    if (response && response.success) {
+      // Update notification to success
+      notification.textContent = 'Screenshot captured!';
+      notification.style.background = '#4caf50';
+
+      setTimeout(() => {
+        if (notification.parentNode) {
+          notification.parentNode.removeChild(notification);
+        }
+      }, 2000);
+    } else {
+      throw new Error(response?.error || 'Unknown error');
+    }
+  } catch (error) {
+    console.error('Failed to capture screenshot:', error);
+
+    // Show error notification
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const notification = document.createElement('div');
+    notification.textContent = `Failed: ${errorMessage.substring(0, 50)}`;
+    notification.style.cssText = `
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: #f44336;
+      color: white;
+      padding: 12px 20px;
+      border-radius: 4px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+      z-index: 999999;
+      font-family: system-ui, -apple-system, sans-serif;
+      font-size: 14px;
+      max-width: 400px;
+    `;
+    document.body.appendChild(notification);
+
+    setTimeout(() => {
+      if (notification.parentNode) {
+        notification.parentNode.removeChild(notification);
+      }
+    }, 4000);
+  }
 }
 
 // Initialize when DOM is ready
