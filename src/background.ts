@@ -7,6 +7,7 @@ import type {
   LinkMetadata,
   ImageMetadata,
   TextMetadata,
+  ScreenshotMetadata,
 } from './types';
 import { NotesCollectorError } from './types/errors';
 import { checkStorageAvailable, safeStorageSet, getStorageWarning } from './utils/storage';
@@ -128,6 +129,10 @@ browser.runtime.onMessage.addListener((message: Message): Promise<MessageRespons
       return handleCaptureImage(message.data);
     case 'CAPTURE_TEXT':
       return handleCaptureText(message.data);
+    case 'REQUEST_SCREENSHOT':
+      return handleRequestScreenshot(message.data);
+    case 'CAPTURE_SCREENSHOT':
+      return handleCaptureScreenshot(message.data);
     case 'GET_ITEMS':
       return handleGetItems();
     case 'DELETE_ITEM':
@@ -302,6 +307,89 @@ async function handleCaptureText(data: {
     }
 
     return { success: false, error: 'Failed to capture text. Please try again.' };
+  }
+}
+
+// Handler for requesting screenshot from content script
+async function handleRequestScreenshot(data: {
+  dimensions: { width: number; height: number; x: number; y: number };
+}): Promise<MessageResponse> {
+  try {
+    // Get active tab
+    const tabs = await browser.tabs.query({ active: true, currentWindow: true });
+    if (!tabs[0]?.id) {
+      return { success: false, error: 'No active tab found' };
+    }
+
+    const tab = tabs[0];
+
+    // Capture visible tab using browser's native API
+    const dataUrl = await browser.tabs.captureVisibleTab({ format: 'png' });
+
+    // Now we need to crop the screenshot to the selected area
+    // We'll send it directly to handleCaptureScreenshot
+    await handleCaptureScreenshot({
+      dataUrl,
+      sourceUrl: tab.url || window.location.href,
+      dimensions: data.dimensions,
+    });
+
+    return { success: true };
+  } catch (error) {
+    console.error('Error requesting screenshot:', error);
+    return { success: false, error: String(error) };
+  }
+}
+
+// Handler for capturing screenshots
+async function handleCaptureScreenshot(data: {
+  dataUrl: string;
+  sourceUrl: string;
+  dimensions: { width: number; height: number; x: number; y: number };
+}): Promise<MessageResponse<CapturedItem>> {
+  try {
+    // Estimate size (data URLs can be very large for screenshots)
+    const estimatedSize = data.dataUrl.length;
+    await checkStorageAvailable(estimatedSize);
+
+    const storageData = await getStorageData();
+
+    const newItem: CapturedItem = {
+      id: crypto.randomUUID(),
+      type: 'screenshot',
+      order: storageData.nextOrder,
+      timestamp: Date.now(),
+      content: data.dataUrl,
+      metadata: {
+        alt: `Screenshot (${data.dimensions.width}x${data.dimensions.height})`,
+        sourceUrl: data.sourceUrl,
+        dimensions: data.dimensions,
+      } as ScreenshotMetadata,
+    };
+
+    storageData.items.push(newItem);
+    storageData.nextOrder++;
+
+    await safeStorageSet({ [STORAGE_KEY]: storageData });
+
+    // Notify sidebar of new item
+    notifySidebar({ type: 'ITEM_ADDED', data: newItem });
+
+    // Check if approaching limits and send warning
+    const warning = await getStorageWarning();
+    if (warning) {
+      notifySidebar({ type: 'STORAGE_WARNING', data: { message: warning } });
+    }
+
+    return { success: true, data: newItem };
+  } catch (error) {
+    console.error('Error capturing screenshot:', error);
+
+    if (error instanceof NotesCollectorError) {
+      return { success: false, error: error.userMessage || error.message };
+    }
+
+    return { success: false, error: 'Failed to capture screenshot. Please try again.' };
   }
 }
 

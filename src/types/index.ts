@@ -2,11 +2,11 @@
 
 export interface CapturedItem {
   id: string;
-  type: 'link' | 'image' | 'text';
+  type: 'link' | 'image' | 'text' | 'screenshot';
   order: number;
   timestamp: number;
   content: string; // URL, data URL, or text content
-  metadata: LinkMetadata | ImageMetadata | TextMetadata;
+  metadata: LinkMetadata | ImageMetadata | TextMetadata | ScreenshotMetadata;
 }
 
 export interface LinkMetadata {
@@ -24,6 +24,17 @@ export interface TextMetadata {
   sourceUrl: string; // URL of the page where text was captured
 }
 
+export interface ScreenshotMetadata {
+  alt: string;
+  sourceUrl: string;
+  dimensions: {
+    width: number;
+    height: number;
+    x: number;
+    y: number;
+  };
+}
+
 export interface StorageData {
   items: CapturedItem[];
   nextOrder: number;
@@ -34,6 +45,8 @@ export type Message =
   | { type: 'CAPTURE_LINK'; data: { href: string; text: string } }
   | { type: 'CAPTURE_IMAGE'; data: { src: string; alt: string; dataUrl: string } }
   | { type: 'CAPTURE_TEXT'; data: { text: string; sourceUrl: string } }
+  | { type: 'REQUEST_SCREENSHOT'; data: { dimensions: { width: number; height: number; x: number; y: number } } }
+  | { type: 'CAPTURE_SCREENSHOT'; data: { dataUrl: string; sourceUrl: string; dimensions: { width: number; height: number; x: number; y: number } } }
   | { type: 'GET_ITEMS' }
   | { type: 'DELETE_ITEM'; data: { id: string } }
   | { type: 'REORDER_ITEMS'; data: { items: CapturedItem[] } }
