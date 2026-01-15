@@ -5,7 +5,7 @@ import { CapturedItem } from '../types';
 
 // Types for pdfMake (internal to this module for simplicity)
 interface PdfMake {
-  createPdf: (docDefinition: any) => {
+  createPdf: (docDefinition: unknown) => {
     download: (filename: string) => void;
     open: () => void;
     print: () => void;
@@ -17,7 +17,7 @@ declare const pdfMake: PdfMake;
 /**
  * Generates and downloads a PDF of the captured items
  */
-export async function generatePdf(items: CapturedItem[]) {
+export function generatePdf(items: CapturedItem[]) {
   if (items.length === 0) return;
 
   // Determine the title: use the most recent item's source URL if available, or a default
@@ -25,10 +25,8 @@ export async function generatePdf(items: CapturedItem[]) {
   const sortedItems = [...items].sort((a, b) => b.timestamp - a.timestamp);
 
   for (const item of sortedItems) {
-    const sourceUrl =
-      (item.metadata as any).sourceUrl ||
-      (item.metadata as any).href ||
-      (item.metadata as any).originalSrc;
+    const meta = item.metadata as unknown as Record<string, string | undefined>;
+    const sourceUrl = meta.sourceUrl || meta.href || meta.originalSrc;
     if (sourceUrl) {
       try {
         title = new URL(sourceUrl).hostname;
@@ -47,8 +45,8 @@ export async function generatePdf(items: CapturedItem[]) {
 /**
  * Creates the document definition for pdfMake
  */
-function createDocDefinition(items: CapturedItem[], title: string): any {
-  const content: any[] = [];
+function createDocDefinition(items: CapturedItem[], title: string): unknown {
+  const content: unknown[] = [];
 
   // Title
   content.push({ text: title, style: 'title' });
@@ -83,7 +81,7 @@ function createDocDefinition(items: CapturedItem[], title: string): any {
             content.push({ text: item.metadata.alt, style: 'imageCaption', margin: [10, 5, 0, 2] });
           }
           content.push({ text: item.metadata.originalSrc, style: 'url', margin: [10, 0, 0, 0] });
-        } catch (e) {
+        } catch {
           content.push({ text: `[Image Error]`, style: 'error', margin: [10, 0, 0, 2] });
         }
       }
@@ -102,7 +100,7 @@ function createDocDefinition(items: CapturedItem[], title: string): any {
             content.push({ text: item.metadata.alt, style: 'imageCaption', margin: [10, 5, 0, 2] });
           }
           content.push({ text: item.metadata.sourceUrl, style: 'url', margin: [10, 0, 0, 0] });
-        } catch (e) {
+        } catch {
           content.push({ text: `[Screenshot Error]`, style: 'error', margin: [10, 0, 0, 2] });
         }
       }

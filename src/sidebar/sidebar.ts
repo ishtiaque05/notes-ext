@@ -32,7 +32,7 @@ class SidebarController {
     } else {
       void this.onReady();
     }
-    browser.runtime.onMessage.addListener((m: any) => {
+    browser.runtime.onMessage.addListener((m: unknown) => {
       this.handleBackgroundMessage(m as Message);
       return true;
     });
@@ -48,7 +48,9 @@ class SidebarController {
 
     // Setup DnD
     this.dndHandlers = setupDragAndDrop(
-      (items) => this.handleReorder(items),
+      (items) => {
+        void this.handleReorder(items);
+      },
       () => this.capturedItems
     );
 
@@ -70,9 +72,12 @@ class SidebarController {
 
   private async loadItems() {
     try {
-      const response = await browser.runtime.sendMessage({ type: 'GET_ITEMS' });
+      const response = (await browser.runtime.sendMessage({ type: 'GET_ITEMS' })) as {
+        success: boolean;
+        data: CapturedItem[];
+      };
       if (response.success) {
-        this.capturedItems = (response.data as CapturedItem[]).sort((a, b) => a.order - b.order);
+        this.capturedItems = response.data.sort((a, b) => a.order - b.order);
         this.renderItems();
         this.updateUI();
       }
@@ -87,10 +92,10 @@ class SidebarController {
       const tabId = tabs[0]?.id;
       if (!tabId) return;
 
-      const response = await browser.runtime.sendMessage({
+      const response = (await browser.runtime.sendMessage({
         type: 'CHECK_SITE_ENABLED',
         data: { tabId },
-      });
+      })) as { success: boolean; data: { enabled: boolean } };
       if (response.success) {
         this.isExtensionEnabled = response.data.enabled;
         this.updateToggleButton();
@@ -166,7 +171,10 @@ class SidebarController {
 
   private async handleDeleteItem(id: string) {
     try {
-      const response = await browser.runtime.sendMessage({ type: 'DELETE_ITEM', data: { id } });
+      const response = (await browser.runtime.sendMessage({
+        type: 'DELETE_ITEM',
+        data: { id },
+      })) as { success: boolean };
       if (response.success) {
         this.capturedItems = this.capturedItems.filter((i) => i.id !== id);
         this.renderItems();
@@ -180,7 +188,9 @@ class SidebarController {
   private async handleClearAll() {
     if (!confirm('Are you sure you want to clear all captured items?')) return;
     try {
-      const response = await browser.runtime.sendMessage({ type: 'CLEAR_ALL' });
+      const response = (await browser.runtime.sendMessage({ type: 'CLEAR_ALL' })) as {
+        success: boolean;
+      };
       if (response.success) {
         this.capturedItems = [];
         this.renderItems();
@@ -202,17 +212,17 @@ class SidebarController {
   }
 
   private handleBackgroundMessage(
-    message: Message | { type: string; data?: any; enabled?: boolean }
+    message: Message | { type: string; data?: unknown; enabled?: boolean }
   ) {
     switch (message.type) {
       case 'ITEM_ADDED':
-        this.capturedItems.push(message.data);
+        this.capturedItems.push(message.data as CapturedItem);
         this.renderItems();
         this.updateUI();
         break;
       case 'ITEM_DELETED':
         this.capturedItems = this.capturedItems.filter(
-          (i) => (i as any).id !== (message.data as any).id
+          (i) => i.id !== (message.data as { id: string }).id
         );
         this.renderItems();
         this.updateUI();
@@ -222,12 +232,14 @@ class SidebarController {
         this.renderItems();
         this.updateUI();
         break;
-      case 'SITE_ENABLED_CHANGED':
-        this.isExtensionEnabled = (message as any).enabled ?? (message as any).data?.enabled;
+      case 'SITE_ENABLED_CHANGED': {
+        const msg = message as { enabled?: boolean; data?: { enabled: boolean } };
+        this.isExtensionEnabled = msg.enabled ?? msg.data?.enabled ?? true;
         this.updateToggleButton();
         break;
+      }
       case 'STORAGE_WARNING':
-        alert((message.data as any).message);
+        alert((message.data as { message: string }).message);
         break;
     }
   }

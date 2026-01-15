@@ -97,7 +97,7 @@ export async function cropScreenshot(
 
         resolve(canvas.toDataURL('image/png', 1.0));
       } catch (e) {
-        reject(e);
+        reject(e instanceof Error ? e : new Error(String(e)));
       }
     };
     img.onerror = () => reject(new Error('Failed to load screenshot for cropping'));

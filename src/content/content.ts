@@ -180,13 +180,13 @@ async function captureScreenshotArea(rect: {
   height: number;
 }) {
   try {
-    const response = await browser.runtime.sendMessage({
+    const response = (await browser.runtime.sendMessage({
       type: 'REQUEST_SCREENSHOT',
       data: {
         dimensions: rect,
         pixelRatio: window.devicePixelRatio,
       },
-    });
+    })) as { success: boolean; data: { dataUrl: string } };
 
     if (response.success && response.data.dataUrl) {
       // ratio/scaling is now handled internally by cropScreenshot using actual image dimensions
