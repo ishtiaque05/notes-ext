@@ -38,6 +38,7 @@ export interface ScreenshotMetadata {
 export interface StorageData {
   items: CapturedItem[];
   nextOrder: number;
+  disabledDomains?: string[];
 }
 
 // Message types for communication between scripts
