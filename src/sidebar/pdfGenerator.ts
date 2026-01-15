@@ -42,19 +42,15 @@ function createDocDefinition(items: CapturedItem[]): any {
     const sortedItems = [...items].sort((a, b) => a.order - b.order);
 
     // Add each item
-    sortedItems.forEach((item, index) => {
-        content.push({
-            text: `${index + 1}. ${item.type.toUpperCase()}`,
-            style: 'itemHeader',
-            margin: [0, 10, 0, 5],
-        });
+    sortedItems.forEach((item) => {
+        // No labels or numbering as per user request
 
         if (item.type === 'link' && 'href' in item.metadata) {
             content.push({
                 text: item.metadata.text || item.metadata.href,
                 link: item.metadata.href,
                 style: 'link',
-                margin: [10, 0, 0, 2],
+                margin: [10, 15, 0, 2],
             });
             if (item.metadata.text && item.metadata.text !== item.metadata.href) {
                 content.push({ text: item.metadata.href, style: 'url', margin: [10, 0, 0, 0] });
@@ -62,7 +58,7 @@ function createDocDefinition(items: CapturedItem[]): any {
         } else if (item.type === 'image' && 'alt' in item.metadata && 'originalSrc' in item.metadata) {
             if (item.content?.startsWith('data:image/')) {
                 try {
-                    content.push({ image: item.content, width: 400, margin: [10, 0, 0, 5] });
+                    content.push({ image: item.content, width: 400, margin: [10, 15, 0, 5] });
                     if (item.metadata.alt) {
                         content.push({ text: item.metadata.alt, style: 'imageCaption', margin: [10, 5, 0, 2] });
                     }
@@ -72,12 +68,12 @@ function createDocDefinition(items: CapturedItem[]): any {
                 }
             }
         } else if (item.type === 'text' && 'text' in item.metadata && 'sourceUrl' in item.metadata) {
-            content.push({ text: item.metadata.text, style: 'capturedText', margin: [10, 0, 0, 5] });
+            content.push({ text: item.metadata.text, style: 'capturedText', margin: [10, 15, 0, 5] });
             content.push({ text: `Source: ${item.metadata.sourceUrl}`, style: 'url', margin: [10, 0, 0, 0] });
         } else if (item.type === 'screenshot' && 'dimensions' in item.metadata) {
             if (item.content?.startsWith('data:image/')) {
                 try {
-                    content.push({ image: item.content, width: 400, margin: [10, 0, 0, 5] });
+                    content.push({ image: item.content, width: 400, margin: [10, 15, 0, 5] });
                     if (item.metadata.alt) {
                         content.push({ text: item.metadata.alt, style: 'imageCaption', margin: [10, 5, 0, 2] });
                     }
