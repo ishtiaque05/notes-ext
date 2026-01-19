@@ -40,6 +40,7 @@ export function createBrowserMock() {
       },
     },
     tabs: {
+      get: vi.fn(async () => ({ id: 1, url: 'https://example.com' })),
       query: vi.fn(async () => []),
       sendMessage: vi.fn(async () => undefined),
       captureVisibleTab: vi.fn(async () => 'data:image/png;base64,mock'),
