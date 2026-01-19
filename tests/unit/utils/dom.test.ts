@@ -45,12 +45,6 @@ describe('dom utilities', () => {
 
     it('should return true for element inside IMG', () => {
       const img = document.createElement('img');
-      const span = document.createElement('span');
-      // Note: IMG can't actually have children, but the logic checks closest()
-      // This tests when an element has an IMG ancestor
-      const div = document.createElement('div');
-      div.appendChild(img);
-      // Actually, let's test a more realistic scenario
       expect(isCapturableElement(img)).toBe(true);
     });
 
