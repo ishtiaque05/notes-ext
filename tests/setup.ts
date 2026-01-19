@@ -5,6 +5,13 @@ import { createBrowserMock } from './mocks/browser';
 beforeEach(() => {
   const browserMock = createBrowserMock();
   vi.stubGlobal('browser', browserMock);
+
+  // Mock self.crypto.randomUUID for service worker context
+  vi.stubGlobal('self', {
+    crypto: {
+      randomUUID: () => `test-uuid-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    },
+  });
 });
 
 // Clean up after each test
