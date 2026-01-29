@@ -7,9 +7,60 @@ on:
     branches: [ main ]
 
 jobs:
-  lint-and-test:
+  # Setup job - install dependencies once and cache them
+  setup:
     runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Setup Node.js with caching
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'yarn'
+
+      - name: Get yarn cache directory
+        id: yarn-cache-dir
+        run: echo "dir=$(yarn config get cacheFolder)" >> $GITHUB_OUTPUT
+
+      - name: Cache yarn dependencies
+        uses: actions/cache@v4
+        id: yarn-cache
+        with:
+          path: |
+            ${{ steps.yarn-cache-dir.outputs.dir }}
+            .yarn/cache
+            .yarn/unplugged
+            node_modules
+          key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-yarn-
+
+      - name: Install dependencies
+        if: steps.yarn-cache.outputs.cache-hit != 'true'
+        run: yarn install --immutable
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        id: playwright-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('**/yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-
+
+      - name: Install Playwright browsers
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps firefox
+
+  # Lint job - runs in parallel with tests
+  lint:
+    runs-on: ubuntu-latest
+    needs: setup
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -23,8 +74,16 @@ jobs:
           node-version: '20'
           cache: 'yarn'
 
-      - name: Install dependencies
-        run: yarn install --immutable
+      - name: Restore yarn cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            .yarn/cache
+            .yarn/unplugged
+            node_modules
+          key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-yarn-
 
       - name: Run all linting (TypeScript, ESLint, Stylelint)
         run: yarn lint
@@ -32,20 +91,10 @@ jobs:
       - name: Check formatting
         run: yarn format:check
 
-      - name: Run unit tests with coverage
-        run: yarn test:coverage
-
-      - name: Upload coverage
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-report
-          path: coverage/
-          retention-days: 7
-
-  e2e-tests:
+  # Unit tests job - runs in parallel with lint
+  test:
     runs-on: ubuntu-latest
-    needs: lint-and-test
-
+    needs: setup
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -59,14 +108,106 @@ jobs:
           node-version: '20'
           cache: 'yarn'
 
-      - name: Install dependencies
-        run: yarn install --immutable
+      - name: Restore yarn cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            .yarn/cache
+            .yarn/unplugged
+            node_modules
+          key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-yarn-
 
-      - name: Install Playwright browsers
-        run: npx playwright install --with-deps firefox
+      - name: Run unit tests with coverage
+        run: yarn test:coverage
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage/
+          retention-days: 7
+
+  # Build job - build once and reuse artifact
+  build:
+    runs-on: ubuntu-latest
+    needs: [lint, test]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'yarn'
+
+      - name: Restore yarn cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            .yarn/cache
+            .yarn/unplugged
+            node_modules
+          key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-yarn-
 
       - name: Build extension
         run: yarn build
+
+      - name: Upload build artifact for E2E tests
+        uses: actions/upload-artifact@v4
+        with:
+          name: extension-build
+          path: dist/
+          retention-days: 30
+
+  # E2E tests - reuse build artifact
+  e2e-tests:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'yarn'
+
+      - name: Restore yarn cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            .yarn/cache
+            .yarn/unplugged
+            node_modules
+          key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-yarn-
+
+      - name: Restore Playwright browsers cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('**/yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-
+
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: extension-build
+          path: dist/
 
       - name: Run E2E tests
         run: yarn test:e2e
@@ -79,32 +220,10 @@ jobs:
           path: playwright-report/
           retention-days: 7
 
-  build:
-    runs-on: ubuntu-latest
-    needs: [lint-and-test, e2e-tests]
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Enable Corepack
-        run: corepack enable
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'yarn'
-
-      - name: Install dependencies
-        run: yarn install --immutable
-
-      - name: Build extension
-        run: yarn build
-
-      - name: Upload build artifacts
+      - name: Upload E2E test screenshots on failure
+        if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: extension-build
-          path: dist/
-          retention-days: 30
+          name: e2e-screenshots
+          path: test-results/
+          retention-days: 7
