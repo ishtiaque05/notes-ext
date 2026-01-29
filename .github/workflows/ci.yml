@@ -85,6 +85,9 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-yarn-
 
+      - name: Install dependencies
+        run: yarn install --immutable
+
       - name: Run all linting (TypeScript, ESLint, Stylelint)
         run: yarn lint
 
@@ -118,6 +121,9 @@ jobs:
           key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
           restore-keys: |
             ${{ runner.os }}-yarn-
+
+      - name: Install dependencies
+        run: yarn install --immutable
 
       - name: Run unit tests with coverage
         run: yarn test:coverage
@@ -157,6 +163,9 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-yarn-
 
+      - name: Install dependencies
+        run: yarn install --immutable
+
       - name: Build extension
         run: yarn build
 
@@ -194,6 +203,9 @@ jobs:
           key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
           restore-keys: |
             ${{ runner.os }}-yarn-
+
+      - name: Install dependencies
+        run: yarn install --immutable
 
       - name: Restore Playwright browsers cache
         uses: actions/cache@v4
