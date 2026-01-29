@@ -89,8 +89,9 @@ describe('pdfGenerator', () => {
 
       generatePdf(items);
 
-      const docDefinition = mockCreatePdf.mock.calls[0][0] as { content: { text: string }[] };
-      expect(docDefinition.content[0].text).toBe('new-site.com');
+      // @ts-expect-error - Mock calls type
+      const docDefinition = (mockCreatePdf.mock.calls[0]![0] as unknown) as { content: { text: string }[] };
+      expect(docDefinition?.content[0]?.text).toBe('new-site.com');
     });
 
     it('should use href as title fallback for links', () => {
@@ -98,8 +99,9 @@ describe('pdfGenerator', () => {
 
       generatePdf(items);
 
-      const docDefinition = mockCreatePdf.mock.calls[0][0] as { content: { text: string }[] };
-      expect(docDefinition.content[0].text).toBe('link-site.com');
+      // @ts-expect-error - Mock calls type
+      const docDefinition = (mockCreatePdf.mock.calls[0]![0] as unknown) as { content: { text: string }[] };
+      expect(docDefinition?.content[0]?.text).toBe('link-site.com');
     });
 
     it('should handle links in document', () => {
@@ -109,7 +111,8 @@ describe('pdfGenerator', () => {
 
       generatePdf(items);
 
-      const docDefinition = mockCreatePdf.mock.calls[0][0] as { content: unknown[] };
+      // @ts-expect-error - Mock calls type
+      const docDefinition = (mockCreatePdf.mock.calls[0]![0] as unknown) as { content: unknown[] };
       // Should have title, subtitle, and link content
       expect(docDefinition.content.length).toBeGreaterThanOrEqual(3);
     });
@@ -119,7 +122,8 @@ describe('pdfGenerator', () => {
 
       generatePdf(items);
 
-      const docDefinition = mockCreatePdf.mock.calls[0][0] as { content: unknown[] };
+      // @ts-expect-error - Mock calls type
+      const docDefinition = (mockCreatePdf.mock.calls[0]![0] as unknown) as { content: unknown[] };
       const imageContent = docDefinition.content.find(
         (c) => typeof c === 'object' && c !== null && 'image' in c
       );
@@ -131,7 +135,8 @@ describe('pdfGenerator', () => {
 
       generatePdf(items);
 
-      const docDefinition = mockCreatePdf.mock.calls[0][0] as { content: { text?: string }[] };
+      // @ts-expect-error - Mock calls type
+      const docDefinition = (mockCreatePdf.mock.calls[0]![0] as unknown) as { content: { text?: string }[] };
       const textContent = docDefinition.content.find(
         (c) => c.text === 'Captured text content'
       );
@@ -143,7 +148,8 @@ describe('pdfGenerator', () => {
 
       generatePdf(items);
 
-      const docDefinition = mockCreatePdf.mock.calls[0][0] as { content: unknown[] };
+      // @ts-expect-error - Mock calls type
+      const docDefinition = (mockCreatePdf.mock.calls[0]![0] as unknown) as { content: unknown[] };
       const screenshotContent = docDefinition.content.find(
         (c) => typeof c === 'object' && c !== null && 'image' in c
       );
@@ -159,7 +165,8 @@ describe('pdfGenerator', () => {
 
       generatePdf(items);
 
-      const docDefinition = mockCreatePdf.mock.calls[0][0] as { content: { text?: string }[] };
+      // @ts-expect-error - Mock calls type
+      const docDefinition = (mockCreatePdf.mock.calls[0]![0] as unknown) as { content: { text?: string }[] };
       const textItems = docDefinition.content.filter(
         (c) => c.text === 'First' || c.text === 'Second' || c.text === 'Third'
       );
@@ -172,7 +179,8 @@ describe('pdfGenerator', () => {
     it('should include styles in document definition', () => {
       generatePdf([createMockLink()]);
 
-      const docDefinition = mockCreatePdf.mock.calls[0][0] as { styles: Record<string, unknown> };
+      // @ts-expect-error - Mock calls type
+      const docDefinition = (mockCreatePdf.mock.calls[0]![0] as unknown) as { styles: Record<string, unknown> };
       expect(docDefinition.styles).toBeDefined();
       expect(docDefinition.styles.title).toBeDefined();
       expect(docDefinition.styles.link).toBeDefined();
@@ -201,7 +209,8 @@ describe('pdfGenerator', () => {
 
       generatePdf(items);
 
-      const docDefinition = mockCreatePdf.mock.calls[0][0] as { content: { text?: string }[] };
+      // @ts-expect-error - Mock calls type
+      const docDefinition = (mockCreatePdf.mock.calls[0]![0] as unknown) as { content: { text?: string }[] };
       const urlContent = docDefinition.content.find(
         (c) => c.text === 'https://example.com/full/path'
       );
@@ -215,7 +224,8 @@ describe('pdfGenerator', () => {
 
       generatePdf(items);
 
-      const docDefinition = mockCreatePdf.mock.calls[0][0] as { content: { text?: string }[] };
+      // @ts-expect-error - Mock calls type
+      const docDefinition = (mockCreatePdf.mock.calls[0]![0] as unknown) as { content: { text?: string }[] };
       // Should use the raw string as title when URL parsing fails
       expect(docDefinition.content[0].text).toBe('not-a-valid-url');
     });

@@ -108,7 +108,7 @@ describe('dragDrop', () => {
       const handlers = setupDragAndDrop(onReorder, getCurrentItems);
 
       const element = createMockElement('item-1');
-      const event = { currentTarget: element } as DragEvent;
+      const event = { currentTarget: element } as unknown as DragEvent;
 
       handlers.handleDragEnter(event);
 
@@ -124,7 +124,7 @@ describe('dragDrop', () => {
 
       const element = createMockElement('item-1');
       element.classList.add('drag-over');
-      const event = { currentTarget: element } as DragEvent;
+      const event = { currentTarget: element } as unknown as DragEvent;
 
       handlers.handleDragLeave(event);
 
@@ -140,7 +140,7 @@ describe('dragDrop', () => {
 
       const element = createMockElement('item-1');
       element.classList.add('dragging');
-      const event = { currentTarget: element } as DragEvent;
+      const event = { currentTarget: element } as unknown as DragEvent;
 
       handlers.handleDragEnd(event);
 
@@ -158,7 +158,7 @@ describe('dragDrop', () => {
       document.body.appendChild(item1);
       document.body.appendChild(item2);
 
-      const event = { currentTarget: item1 } as DragEvent;
+      const event = { currentTarget: item1 } as unknown as DragEvent;
       handlers.handleDragEnd(event);
 
       expect(item2.classList.contains('drag-over')).toBe(false);

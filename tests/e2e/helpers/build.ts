@@ -9,7 +9,7 @@ const execAsync = promisify(exec);
 export async function buildExtension(): Promise<void> {
   console.log('Building extension...');
   try {
-    const { stdout, stderr } = await execAsync('yarn build');
+    const { stderr } = await execAsync('yarn build');
     if (stderr && !stderr.includes('webpack')) {
       console.error('Build warnings:', stderr);
     }

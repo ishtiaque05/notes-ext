@@ -177,15 +177,16 @@ test.describe.skip('Content Script Integration (Requires Full Extension Context)
       };
 
       // Store in extension storage
-      if (typeof browser !== 'undefined' && browser.storage) {
-        return browser.storage.local.set({
+      if (typeof (window as any).browser !== 'undefined' && (window as any).browser.storage) {
+        return (window as any).browser.storage.local.set({
           items: [testItem],
         });
-      } else if (typeof chrome !== 'undefined' && chrome.storage) {
+      } else if (typeof (window as any).chrome !== 'undefined' && (window as any).chrome.storage) {
         return new Promise((resolve) => {
-          chrome.storage.local.set({ items: [testItem] }, resolve);
+          (window as any).chrome.storage.local.set({ items: [testItem] }, resolve);
         });
       }
+      return Promise.resolve();
     });
 
     // Reload to see the items
@@ -209,9 +210,9 @@ test.describe.skip('Storage and Persistence (Requires Full Extension Context)', 
 
     // Read storage
     const storageData = await page.evaluate(() => {
-      if (typeof chrome !== 'undefined' && chrome.storage) {
+      if (typeof (window as any).chrome !== 'undefined' && (window as any).chrome.storage) {
         return new Promise((resolve) => {
-          chrome.storage.local.get(['items', 'disabledDomains'], (data) => {
+          (window as any).chrome.storage.local.get(['items', 'disabledDomains'], (data: any) => {
             resolve(data);
           });
         });

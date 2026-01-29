@@ -64,7 +64,7 @@ describe('screenshotHandler', () => {
     it('should handle missing tab info', async () => {
       const sender: browser.runtime.MessageSender = {};
 
-      const result = await handleRequestScreenshot({}, sender);
+      await handleRequestScreenshot({}, sender);
 
       // Should still attempt capture with undefined windowId
       expect(browser.tabs.captureVisibleTab).toHaveBeenCalled();
@@ -154,6 +154,7 @@ describe('screenshotHandler', () => {
         sourceUrl: 'https://subdomain.example.org/path/to/page?query=1',
       });
 
+      // @ts-expect-error - Type narrowing
       expect(result.data?.metadata?.alt).toBe('Screenshot from subdomain.example.org');
     });
   });

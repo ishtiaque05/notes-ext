@@ -24,7 +24,7 @@ vi.mock('../../../src/content/utils', () => ({
 }));
 
 vi.mock('../../../src/content/components/screenshotOverlay', () => ({
-  startScreenshotMode: vi.fn((x, y, callback) => {
+  startScreenshotMode: vi.fn((_x, _y, callback) => {
     // Immediately invoke callback with mock rect for testing
     callback({ x: 10, y: 10, width: 100, height: 100 });
   }),
@@ -161,8 +161,6 @@ describe('content script', () => {
 
   describe('screenshot capture', () => {
     it('should start screenshot mode on Shift+MouseDown', async () => {
-      const { startScreenshotMode } = await import('../../../src/content/components/screenshotOverlay');
-
       vi.mocked(browser.runtime.sendMessage).mockResolvedValue({
         success: true,
         data: { dataUrl: 'data:image/png;base64,screenshot' },
@@ -199,10 +197,14 @@ describe('content script', () => {
       const messageListener = vi.mocked(browser.runtime.onMessage.addListener).mock.calls[0]?.[0];
 
       if (messageListener) {
-        messageListener({
-          type: 'SITE_ENABLED_CHANGED',
-          enabled: false,
-        });
+        messageListener(
+          {
+            type: 'SITE_ENABLED_CHANGED',
+            enabled: false,
+          },
+          {} as browser.runtime.MessageSender,
+          () => {}
+        );
       }
 
       // Try to capture - should not work
@@ -219,7 +221,7 @@ describe('content script', () => {
       // Should not send capture message when disabled
     });
 
-    it('should register message listener for site enabled changes', async () => {
+    it('should register message listener for site enabled changes', () => {
       // The content script registers a message listener on initialization
       // This listener handles SITE_ENABLED_CHANGED messages
 
@@ -257,7 +259,7 @@ describe('content script', () => {
 
       link.dispatchEvent(event);
 
-      await new Promise(resolve => setTimeout(resolve, 10));
+      await new Promise<void>(resolve => setTimeout(resolve, 10));
 
       // Should handle error without crashing
       consoleErrorSpy.mockRestore();
