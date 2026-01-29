@@ -11,6 +11,12 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:debug": "playwright test --debug",
+    "test:e2e:report": "playwright show-report",
+    "test:all": "yarn test && yarn test:e2e",
     "lint": "yarn lint:ts && yarn lint:eslint && yarn lint:style",
     "lint:ts": "tsc --noEmit",
     "lint:eslint": "ESLINT_USE_FLAT_CONFIG=false eslint 'src/**/*.ts'",
@@ -19,6 +25,7 @@
     "format:check": "prettier --check 'src/**/*.{ts,scss,html}'"
   },
   "devDependencies": {
+    "@playwright/test": "^1.58.0",
     "@types/firefox-webext-browser": "^143.0.0",
     "@types/jsdom": "^27",
     "@types/node": "^25.0.6",
